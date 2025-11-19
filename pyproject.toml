@@ -1,0 +1,41 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools>=61.0"]
+
+[project]
+authors = [
+  {name = "Lorenzo Asfour"}
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License"
+]
+dependencies = [
+]
+description = ""
+name = "quantized-gravnet"
+readme = "README.md"
+requires-python = ">=3.10"
+version = "0.1.0"
+
+[tool.ruff]
+
+[tool.ruff.format]
+docstring-code-format = true
+indent-style = "space"
+quote-style = "double"
+skip-magic-trailing-comma = false
+
+[tool.ruff.isort]
+combine-as-imports = true
+force-sort-within-sections = true
+known-first-party = ["qgravnet"]
+
+[tool.ruff.lint]
+fixable = ["ALL"]
+ignore = ["E501"]
+select = ["E", "F", "I"]
+
+[tool.setuptools.packages.find]
+include = ["qgravnet*"]
+where = ["."]
