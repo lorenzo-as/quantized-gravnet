@@ -1,3 +1,4 @@
+from .factory import QGravNetFactory
 from .layers import GlobalExchange, QGravNetLayer
 from .model import QGravNetBlock, QGravNetModel
 
@@ -6,4 +7,5 @@ __all__ = [
     "QGravNetBlock",
     "QGravNetLayer",
     "GlobalExchange",
+    "QGravNetFactory",
 ]
