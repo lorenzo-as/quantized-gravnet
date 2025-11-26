@@ -6,8 +6,8 @@ Adapted from https://github.com/jkiesele/caloGraphNN/blob/6d1127d807bc0dbaefcf1e
 import warnings
 
 import keras
+from keras import ops
 from qkeras import QDense
-import tensorflow as tf
 
 
 class GlobalExchange(keras.layers.Layer):
@@ -26,20 +26,26 @@ class GlobalExchange(keras.layers.Layer):
 
     def call(self, x):
         # x: (B, V, F)
-        tf.debugging.assert_rank(
-            x, 3, message="GlobalExchange expects input of shape (B, V, F)"
+        assert ops.ndim(x) == 3, (
+            f"GlobalExchange expects input of shape (B, V, F) but received shape {ops.shape(x)}"
         )
 
-        mean = tf.reduce_mean(x, axis=1, keepdims=True)  # (B, 1, F)
-        vmin = tf.reduce_min(x, axis=1, keepdims=True)  # (B, 1, F)
-        vmax = tf.reduce_max(x, axis=1, keepdims=True)  # (B, 1, F)
+        mean = ops.mean(x, axis=1, keepdims=True)  # (B, 1, F)
+        vmin = ops.min(x, axis=1, keepdims=True)  # (B, 1, F)
+        vmax = ops.max(x, axis=1, keepdims=True)  # (B, 1, F)
 
-        stats = tf.concat([mean, vmin, vmax], axis=-1)  # (B, 1, 3F)
+        stats = ops.concatenate([mean, vmin, vmax], axis=-1)  # (B, 1, 3F)
 
-        V = tf.shape(x)[1]
-        stats = tf.tile(stats, [1, V, 1])  # (B, V, 3F)
+        V = ops.shape(x)[1]
+        stats = ops.tile(stats, [1, V, 1])  # (B, V, 3F)
 
-        return tf.concat([stats, x], axis=-1)  # (B, V, 4F) [mean, min, max, x]
+        return ops.concatenate([stats, x], axis=-1)  # (B, V, 4F) [mean, min, max, x]
+
+    def compute_output_shape(
+        self, input_shape
+    ):  # with ops.tile, static shape info appears to be lost vs tf.tile thus this is needed
+        B, V, F = input_shape
+        return (B, V, 4 * F)
 
 
 class GravNetCore(keras.layers.Layer):
@@ -63,39 +69,41 @@ class GravNetCore(keras.layers.Layer):
         feats:  (B, V, F_prop)
         returns: aggregated features (B, V, 2*F_prop) -> concat([fmax, fmean])
         """
-        B = tf.shape(feats)[0]
-        V = tf.shape(feats)[1]
+        B = ops.shape(feats)[0]
+        V = ops.shape(feats)[1]
 
         # squared distances (B, V, V)
         dist = self._euclidean_squared(coords, coords)
 
-        #! possibly ties in distances with quantization? is the below better?
-        dist = dist + tf.eye(V, batch_shape=[B]) * 1e9  # mask diagonal
-        ranked_distances, ranked_indices = tf.nn.top_k(-dist, k=self.n_neighbours)
+        dist = (
+            dist + ops.repeat(ops.expand_dims(ops.eye(V, V), axis=0), B, axis=0) * 1e9
+        )  # ? or better to do ranked_indices[:, :, 1:]
+        ranked_distances, ranked_indices = ops.top_k(
+            -dist, k=self.n_neighbours, sorted=True
+        )
         ranked_distances = -ranked_distances
 
-        batch_range = tf.range(B)
-        batch_range = tf.reshape(batch_range, (B, 1, 1))
-        batch_range = tf.tile(batch_range, [1, V, self.n_neighbours])
-        gather_idx = tf.stack([batch_range, ranked_indices], axis=-1)  # (B, V, k, 2)
-        neigh_feats = tf.gather_nd(feats, gather_idx)
+        feats = ops.expand_dims(feats, 2)  # (B, V, 1, F_prop)
+        gather_idx = ops.expand_dims(ranked_indices, -1)  # (B, V, k, 1)
+        neigh_feats = ops.take_along_axis(
+            feats, gather_idx, axis=1
+        )  # (B, V, k, F_prop)
 
-        w = tf.exp(-10.0 * ranked_distances)
-        w = tf.expand_dims(w, -1)
-
+        w = ops.exp(-10.0 * ranked_distances)
+        w = ops.expand_dims(w, -1)
         weighted = neigh_feats * w
 
-        fmax = tf.reduce_max(weighted, axis=2)
-        fmean = tf.reduce_mean(weighted, axis=2)
+        fmax = ops.max(weighted, axis=2)
+        fmean = ops.mean(weighted, axis=2)
 
-        return tf.concat([fmax, fmean], axis=-1)
+        return ops.concatenate([fmax, fmean], axis=-1)
 
     @staticmethod
     def _euclidean_squared(A, B):
-        sub = -2.0 * tf.matmul(A, B, transpose_b=True)
-        dotA = tf.reduce_sum(tf.square(A), axis=2, keepdims=True)
-        dotB = tf.reduce_sum(tf.square(B), axis=2, keepdims=True)
-        dotB = tf.transpose(dotB, [0, 2, 1])
+        sub = -2.0 * ops.matmul(A, ops.transpose(B, [0, 2, 1]))
+        dotA = ops.sum(ops.square(A), axis=2, keepdims=True)
+        dotB = ops.sum(ops.square(B), axis=2, keepdims=True)
+        dotB = ops.transpose(dotB, [0, 2, 1])
         return sub + dotA + dotB
 
 
@@ -160,7 +168,7 @@ class GravNetLayer(keras.layers.Layer):
         # neighbour aggregation
         neigh = self.core(coords, fprop)
 
-        merged = tf.concat([x, neigh], axis=-1)
+        merged = ops.concatenate([x, neigh], axis=-1)
 
         out = self.output_feature_transform(merged)
 

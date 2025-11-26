@@ -1,7 +1,6 @@
 # pyright: reportMissingImports=false
 import keras
 from qkeras import QDense
-import tensorflow as tf
 
 from .layers import (
     GlobalExchange,
@@ -189,7 +188,7 @@ class QGravNetModel(keras.Model):
             x = block(x, training=training)
             feat_list.append(x)
 
-        x = tf.concat(feat_list, axis=-1)  # (B, V, n_blocks * n_filters)
+        x = keras.ops.concatenate(feat_list, axis=-1)  # (B, V, n_blocks * n_filters)
 
         for layer in self.postgn_dense_layers:
             if isinstance(layer, keras.layers.BatchNormalization):
