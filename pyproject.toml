@@ -4,19 +4,25 @@ requires = ["setuptools>=61.0"]
 
 [project]
 authors = [
-  {name = "Lorenzo Asfour"}
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
-  "License :: OSI Approved :: MIT License"
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent"
 ]
-dependencies = [
-]
-description = ""
+description = "A quantized QKeras-based implementation of the GravNet architecture."
 name = "quantized-gravnet"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 version = "0.1.0"
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+  "ignore::DeprecationWarning:tensorflow_model_optimization"
+]
 
 [tool.ruff]
 
@@ -24,7 +30,6 @@ version = "0.1.0"
 docstring-code-format = true
 indent-style = "space"
 quote-style = "double"
-skip-magic-trailing-comma = false
 
 [tool.ruff.isort]
 combine-as-imports = true
