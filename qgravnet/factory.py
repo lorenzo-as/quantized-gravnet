@@ -1,6 +1,6 @@
 # pyright: reportMissingImports=false
 
-from typing import Dict, Optional
+from typing import Dict, Literal, Optional
 
 import keras
 from qkeras import QDense
@@ -18,6 +18,7 @@ class QGravNetFactory:
         n_propagate: int = 22,
         n_postgn_dense_blocks: int = 4,
         output_dim: int = 4,
+        output_head: Literal["dual", "oc"] = "dual",
         dense_kernel_quantizer=None,
         dense_bias_quantizer=None,
         gravnet_kwargs: Optional[Dict] = None,
@@ -32,6 +33,7 @@ class QGravNetFactory:
         self.n_propagate = n_propagate
         self.n_postgn_dense_blocks = n_postgn_dense_blocks
         self.output_dim = output_dim
+        self.output_head = output_head
 
         self.dense_kernel_quantizer = dense_kernel_quantizer
         self.dense_bias_quantizer = dense_bias_quantizer
@@ -172,12 +174,35 @@ class QGravNetFactory:
             bias_quantizer=self.dense_bias_quantizer,
             name="out1",
         )(x)
-        outputs = QDense(
-            self.output_dim,
-            activation=None,
-            kernel_quantizer=self.dense_kernel_quantizer,
-            bias_quantizer=self.dense_bias_quantizer,
-            name="out2",
-        )(x)
 
-        return keras.Model(inputs=inputs, outputs=outputs, name="qgravnet_model")
+        if self.output_head == "dual":
+            x = keras.layers.GlobalAveragePooling1D(name="global_avg_pool")(x)
+            energies = QDense(
+                1,
+                activation=None,
+                kernel_quantizer=self.dense_kernel_quantizer,
+                bias_quantizer=self.dense_bias_quantizer,
+                name="regression",
+            )(x)
+            classes = QDense(
+                1,
+                activation="sigmoid",
+                kernel_quantizer=self.dense_kernel_quantizer,
+                bias_quantizer=self.dense_bias_quantizer,
+                name="classification",
+            )(x)
+
+            return keras.Model(
+                inputs=inputs, outputs=[energies, classes], name="qgravnet_model_dual"
+            )
+
+        elif self.output_head == "oc":
+            outputs = QDense(
+                self.output_dim,
+                activation=None,
+                kernel_quantizer=self.dense_kernel_quantizer,
+                bias_quantizer=self.dense_bias_quantizer,
+                name="out2",
+            )(x)
+
+            return keras.Model(inputs=inputs, outputs=outputs, name="qgravnet_model_oc")
