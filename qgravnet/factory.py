@@ -145,8 +145,12 @@ class QGravNetFactory:
             feat_list.append(out)
             x = out
 
-        # Concatenate features from all blocks
-        x = keras.layers.Concatenate(name="final_concat")(feat_list)
+        # Concatenate features from all blocks - do this iteratively for hls4ml compatibility
+        for i, feat in enumerate(feat_list, start=1):
+            if i == 1:
+                x = feat
+            else:
+                x = keras.layers.Concatenate(name=f"final_concat_{i}")([x, feat])
 
         # Post-GravNet dense layers: repeated (Dense(128, ReLU) + BN)
         for i in range(self.n_postgn_dense_blocks):
