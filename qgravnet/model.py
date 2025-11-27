@@ -3,8 +3,8 @@ import keras
 from qkeras import QDense
 
 from .layers import (
-    GlobalExchange,
     QGravNetLayer,
+    global_exchange,
 )
 
 
@@ -61,7 +61,6 @@ class QGravNetBlock(keras.layers.Layer):
         )
 
         # Global exchange + output (Linear(4*n_filters -> n_filters) + Tanh + BN)
-        self.gex = GlobalExchange()
         self.out_dense = QDense(
             n_filters,
             activation="tanh",
@@ -81,7 +80,7 @@ class QGravNetBlock(keras.layers.Layer):
         x = self.dense1(x)
 
         # Global exchange and output
-        x = self.gex(x)
+        x = global_exchange(x, None, self.n_filters, prefix=f"{self.name}_gex")
         x = self.out_dense(x)
         x = self.out_bn(x, training=training)
         return x
@@ -119,7 +118,6 @@ class QGravNetModel(keras.Model):
 
         # Input BN + global exchange + linear to 64 (on 4*input_dim features)
         self.input_bn = keras.layers.BatchNormalization()
-        self.input_exchange = GlobalExchange()
         self.input_dense = QDense(
             64,
             activation=None,  # as in Torch
@@ -180,7 +178,7 @@ class QGravNetModel(keras.Model):
     def call(self, inputs, training=False):
         # inputs: (B, V, F)
         x = self.input_bn(inputs, training=training)
-        x = self.input_exchange(x)
+        x = global_exchange(x, None, 64, prefix="input_gex")
         x = self.input_dense(x)
 
         feat_list = []

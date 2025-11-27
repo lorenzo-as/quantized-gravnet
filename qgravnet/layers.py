@@ -6,11 +6,13 @@ Adapted from https://github.com/jkiesele/caloGraphNN/blob/6d1127d807bc0dbaefcf1e
 import warnings
 
 import keras
-from keras import ops
+from keras import layers, ops
 from qkeras import QDense
 
+from .utils import pairwise_concatenate
 
-class GlobalExchange(keras.layers.Layer):
+
+def global_exchange(x, n_vertices, n_features, prefix: str = "global_exchange"):
     """
     Compute statistics (mean, min, max) over features for all vertices in the batch
     and concatenate them to each vertex's features.
@@ -19,33 +21,39 @@ class GlobalExchange(keras.layers.Layer):
     Output shape: (B, V, 4F)  # [mean, min, max, original]
     """
 
-    def __init__(self, vertex_mask=None, **kwargs):
-        super().__init__(**kwargs)
-        if vertex_mask is not None:
-            raise NotImplementedError
+    mean_feat = layers.GlobalAveragePooling1D(keepdims=False, name=f"{prefix}_mean")(
+        x
+    )  # (B, F)
+    max_feat = layers.GlobalMaxPooling1D(keepdims=False, name=f"{prefix}_max")(
+        x
+    )  # (B, F)
+    neg = layers.Dense(
+        n_features,
+        use_bias=False,
+        activation=None,
+        kernel_initializer=keras.initializers.Constant(-1.0 * ops.eye(n_features)),
+        trainable=False,
+    )  # negation layer
+    min_feat = neg(
+        layers.GlobalMaxPooling1D(keepdims=False, name=f"{prefix}_min")(neg(x))
+    )  # (B, F)
 
-    def call(self, x):
-        # x: (B, V, F)
-        assert ops.ndim(x) == 3, (
-            f"GlobalExchange expects input of shape (B, V, F) but received shape {ops.shape(x)}"
-        )
+    stats = pairwise_concatenate(
+        [mean_feat, min_feat, max_feat],
+        axis=-1,
+        name_prefix=f"{prefix}_global_stats_concat",
+    )  # (B, 3F)
+    stats_expanded = layers.Reshape(
+        (1, 3 * n_features), name=f"{prefix}_global_stats_reshape"
+    )(stats)  # (B, 1, 3F)
+    repeated = layers.UpSampling1D(
+        size=n_vertices, name=f"{prefix}_global_stats_upsample"
+    )(stats_expanded)
+    out = layers.Concatenate(axis=-1, name=f"{prefix}_concat")(
+        [repeated, x]
+    )  # (B, V, 4F)
 
-        mean = ops.mean(x, axis=1, keepdims=True)  # (B, 1, F)
-        vmin = ops.min(x, axis=1, keepdims=True)  # (B, 1, F)
-        vmax = ops.max(x, axis=1, keepdims=True)  # (B, 1, F)
-
-        stats = ops.concatenate([mean, vmin, vmax], axis=-1)  # (B, 1, 3F)
-
-        V = ops.shape(x)[1]
-        stats = ops.tile(stats, [1, V, 1])  # (B, V, 3F)
-
-        return ops.concatenate([stats, x], axis=-1)  # (B, V, 4F) [mean, min, max, x]
-
-    def compute_output_shape(
-        self, input_shape
-    ):  # with ops.tile, static shape info appears to be lost vs tf.tile thus this is needed
-        B, V, F = input_shape
-        return (B, V, 4 * F)
+    return out
 
 
 class GravNetCore(keras.layers.Layer):

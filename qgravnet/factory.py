@@ -5,7 +5,8 @@ from typing import Dict, Literal, Optional
 import keras
 from qkeras import QDense
 
-from .layers import GlobalExchange, GravNetCore
+from .layers import GravNetCore, global_exchange
+from .utils import pairwise_concatenate
 
 
 class QGravNetFactory:
@@ -44,7 +45,7 @@ class QGravNetFactory:
 
         # Input BN + global exchange + linear to 64 (on 4*input_dim features)
         x = keras.layers.BatchNormalization(name="input_bn")(inputs)
-        x = GlobalExchange(name="input_gex")(x)
+        x = global_exchange(x, n_vertices, n_features, prefix="input_gex")
         x = QDense(
             64,
             activation=None,
@@ -131,8 +132,10 @@ class QGravNetFactory:
                 name=f"{block_prefix}_dense1",
             )(out)
 
-            # Global exchange + output (Linear(4*n_filters -> n_filters) + Tanh + BN)
-            out = GlobalExchange(name=f"{block_prefix}_gex")(out)
+            # global exchange + output (Linear(4*n_filters -> n_filters) + Tanh + BN)
+            out = global_exchange(
+                out, n_vertices, self.n_filters, prefix=f"{block_prefix}_gex"
+            )
             out = QDense(
                 self.n_filters,
                 activation="tanh",
@@ -145,12 +148,7 @@ class QGravNetFactory:
             feat_list.append(out)
             x = out
 
-        # Concatenate features from all blocks - do this iteratively for hls4ml compatibility
-        for i, feat in enumerate(feat_list, start=1):
-            if i == 1:
-                x = feat
-            else:
-                x = keras.layers.Concatenate(name=f"final_concat_{i}")([x, feat])
+        x = pairwise_concatenate(feat_list, name_prefix="final_concat")
 
         # Post-GravNet dense layers: repeated (Dense(128, ReLU) + BN)
         for i in range(self.n_postgn_dense_blocks):
