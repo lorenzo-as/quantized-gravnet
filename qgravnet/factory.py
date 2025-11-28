@@ -23,6 +23,7 @@ class QGravNetFactory:
         dense_kernel_quantizer=None,
         dense_bias_quantizer=None,
         gravnet_kwargs: Optional[Dict] = None,
+        dense_layer_dims: Optional[Dict[str, int]] = None,
     ):
         if gravnet_kwargs is None:
             gravnet_kwargs = {}
@@ -40,14 +41,24 @@ class QGravNetFactory:
         self.dense_bias_quantizer = dense_bias_quantizer
         self.gravnet_kwargs = gravnet_kwargs
 
+        self.dense_layer_dims = {
+            "input_dense": 64,
+            "post_gn": 128,
+            "postgn_block": 128,
+            "out0": 64,
+            "out1": 64,
+        }
+        if dense_layer_dims:
+            self.dense_layer_dims.update(dense_layer_dims)
+
     def create_keras_model(self, n_vertices: int, n_features: int) -> keras.Model:
         inputs = keras.Input(shape=(n_vertices, n_features), name="input")
 
-        # Input BN + global exchange + linear to 64 (on 4*input_dim features)
+        # Input BN + global exchange + linear
         x = keras.layers.BatchNormalization(name="input_bn")(inputs)
         x = global_exchange(x, n_vertices, n_features, prefix="input_gex")
         x = QDense(
-            64,
+            self.dense_layer_dims["input_dense"],
             activation=None,
             kernel_quantizer=self.dense_kernel_quantizer,
             bias_quantizer=self.dense_bias_quantizer,
@@ -114,10 +125,10 @@ class QGravNetFactory:
 
             out = output_feature_transform(merged)
 
-            # Post-GravNet: BN -> Dense(128,tanh) -> BN -> Dense(n_filters,tanh)
+            # Post-GravNet: BN -> Dense(tanh) -> BN -> Dense(n_filters,tanh)
             out = keras.layers.BatchNormalization(name=f"{block_prefix}_bn0")(out)
             out = QDense(
-                128,
+                self.dense_layer_dims["post_gn"],
                 activation="tanh",
                 kernel_quantizer=self.dense_kernel_quantizer,
                 bias_quantizer=self.dense_bias_quantizer,
@@ -132,7 +143,6 @@ class QGravNetFactory:
                 name=f"{block_prefix}_dense1",
             )(out)
 
-            # global exchange + output (Linear(4*n_filters -> n_filters) + Tanh + BN)
             out = global_exchange(
                 out, n_vertices, self.n_filters, prefix=f"{block_prefix}_gex"
             )
@@ -150,10 +160,10 @@ class QGravNetFactory:
 
         x = pairwise_concatenate(feat_list, name_prefix="final_concat")
 
-        # Post-GravNet dense layers: repeated (Dense(128, ReLU) + BN)
+        # Post-GravNet dense layers: repeated (Dense(ReLU) + BN)
         for i in range(self.n_postgn_dense_blocks):
             x = QDense(
-                128,
+                self.dense_layer_dims["postgn_block"],
                 activation="relu",
                 kernel_quantizer=self.dense_kernel_quantizer,
                 bias_quantizer=self.dense_bias_quantizer,
@@ -161,16 +171,15 @@ class QGravNetFactory:
             )(x)
             x = keras.layers.BatchNormalization(name=f"postgn_bn_{i}")(x)
 
-        # Output head: 128 -> 64 -> 64 -> output_dim
         x = QDense(
-            64,
+            self.dense_layer_dims["out0"],
             activation="relu",
             kernel_quantizer=self.dense_kernel_quantizer,
             bias_quantizer=self.dense_bias_quantizer,
             name="out0",
         )(x)
         x = QDense(
-            64,
+            self.dense_layer_dims["out1"],
             activation="relu",
             kernel_quantizer=self.dense_kernel_quantizer,
             bias_quantizer=self.dense_bias_quantizer,
