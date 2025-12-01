@@ -52,7 +52,7 @@ class QGravNetFactory:
             self.dense_layer_dims.update(dense_layer_dims)
 
     def create_keras_model(self, n_vertices: int, n_features: int) -> keras.Model:
-        inputs = keras.Input(shape=(n_vertices, n_features), name="input")
+        inputs = keras.Input(shape=(n_vertices, n_features))
 
         # Input BN + global exchange + linear
         x = keras.layers.BatchNormalization(name="input_bn")(inputs)

@@ -114,6 +114,11 @@ class GravNetCore(keras.layers.Layer):
         dotB = ops.transpose(dotB, [0, 2, 1])
         return sub + dotA + dotB
 
+    def get_config(self):
+        config = super().get_config()
+        config["n_neighbours"] = self.n_neighbours
+        return config
+
 
 class GravNetLayer(keras.layers.Layer):
     """
