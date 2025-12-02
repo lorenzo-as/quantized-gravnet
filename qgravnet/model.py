@@ -1,6 +1,7 @@
 # pyright: reportMissingImports=false
-import keras
+
 from qkeras import QDense
+from tensorflow import keras
 
 from .layers import (
     QGravNetLayer,

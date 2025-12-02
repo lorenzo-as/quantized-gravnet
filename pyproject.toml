@@ -10,10 +10,15 @@ classifiers = [
   "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent"
 ]
+dependencies = [
+  "tensorflow==2.14.0",
+  "qkeras>=0.9.0",
+  "pyparsing>=3.0"
+]
 description = "A quantized QKeras-based implementation of the GravNet architecture."
 name = "quantized-gravnet"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 version = "0.1.0"
 
 [project.optional-dependencies]
@@ -21,7 +26,9 @@ dev = ["pytest"]
 
 [tool.pytest.ini_options]
 filterwarnings = [
-  "ignore::DeprecationWarning:tensorflow_model_optimization"
+  "ignore::DeprecationWarning:tensorflow_model_optimization",
+  "ignore:.*distutils package is deprecated.*:DeprecationWarning",
+  "ignore:.*ml_dtypes.float8_e4m3b11 is deprecated.*:DeprecationWarning"
 ]
 
 [tool.ruff]

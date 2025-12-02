@@ -1,6 +1,6 @@
 # quantized-gravnet
 
-A QKerasV3-based implementation of the **GravNet** architecture.
+A Tensorflow + QKeras-based implementation of the **GravNet** architecture.
 
 This package provides:
 - `GravNetCore` - the core neighbour-aggregation logic
@@ -11,10 +11,13 @@ This package provides:
 
 ## Installation
 
-This package depends on QKeras v3 (available on TestPyPI for now):
+This package was tested with **TensorFlow 2.14.0** and **QKeras 0.9.0**.
 
 ```bash
-pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple qkeras-v3==1.0.3
+git clone https://github.com/lorenzo-as/quantized-gravnet.git
+cd quantized-gravnet
+git checkout qkeras-classic
+pip install -e .
 ```
 
 ## Reference to Original GravNet Paper
@@ -36,7 +39,7 @@ https://github.com/jkiesele/caloGraphNN/blob/master/keras_models.py
 
 ## Example
 
-```
+```python
 from qgravnet import QGravNetFactory
 model = QGravNetFactory(n_blocks=4, n_neighbours=40).create_keras_model(n_vertices=128, n_features=16)
 

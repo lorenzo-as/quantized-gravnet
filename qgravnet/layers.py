@@ -5,9 +5,10 @@ Adapted from https://github.com/jkiesele/caloGraphNN/blob/6d1127d807bc0dbaefcf1e
 # pyright: reportMissingImports=false
 import warnings
 
-import keras
-from keras import layers, ops
 from qkeras import QDense
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
 
 from .utils import pairwise_concatenate
 
@@ -31,7 +32,7 @@ def global_exchange(x, n_vertices, n_features, prefix: str = "global_exchange"):
         n_features,
         use_bias=False,
         activation=None,
-        kernel_initializer=keras.initializers.Constant(-1.0 * ops.eye(n_features)),
+        kernel_initializer=keras.initializers.Constant(-1.0 * tf.eye(n_features)),
         trainable=False,
     )  # negation layer
     min_feat = neg(
@@ -77,41 +78,38 @@ class GravNetCore(keras.layers.Layer):
         feats:  (B, V, F_prop)
         returns: aggregated features (B, V, 2*F_prop) -> concat([fmax, fmean])
         """
-        B = ops.shape(feats)[0]
-        V = ops.shape(feats)[1]
+        B = tf.shape(feats)[0]
+        V = tf.shape(feats)[1]
 
         # squared distances (B, V, V)
         dist = self._euclidean_squared(coords, coords)
 
         dist = (
-            dist + ops.repeat(ops.expand_dims(ops.eye(V, V), axis=0), B, axis=0) * 1e9
+            dist + tf.repeat(tf.expand_dims(tf.eye(V, V), axis=0), B, axis=0) * 1e9
         )  # ? or better to do ranked_indices[:, :, 1:]
-        ranked_distances, ranked_indices = ops.top_k(
+        ranked_distances, ranked_indices = tf.math.top_k(
             -dist, k=self.n_neighbours, sorted=True
         )
         ranked_distances = -ranked_distances
 
-        feats = ops.expand_dims(feats, 2)  # (B, V, 1, F_prop)
-        gather_idx = ops.expand_dims(ranked_indices, -1)  # (B, V, k, 1)
-        neigh_feats = ops.take_along_axis(
-            feats, gather_idx, axis=1
+        neigh_feats = tf.gather(
+            feats, ranked_indices, axis=1, batch_dims=1
         )  # (B, V, k, F_prop)
 
-        w = ops.exp(-10.0 * ranked_distances)
-        w = ops.expand_dims(w, -1)
+        w = tf.exp(-10.0 * ranked_distances)
+        w = tf.expand_dims(w, -1)
         weighted = neigh_feats * w
 
-        fmax = ops.max(weighted, axis=2)
-        fmean = ops.mean(weighted, axis=2)
-
-        return ops.concatenate([fmax, fmean], axis=-1)
+        fmax = tf.reduce_max(weighted, axis=2)
+        fmean = tf.reduce_mean(weighted, axis=2)
+        return tf.concat([fmax, fmean], axis=-1)
 
     @staticmethod
     def _euclidean_squared(A, B):
-        sub = -2.0 * ops.matmul(A, ops.transpose(B, [0, 2, 1]))
-        dotA = ops.sum(ops.square(A), axis=2, keepdims=True)
-        dotB = ops.sum(ops.square(B), axis=2, keepdims=True)
-        dotB = ops.transpose(dotB, [0, 2, 1])
+        sub = -2.0 * tf.matmul(A, tf.transpose(B, [0, 2, 1]))
+        dotA = tf.reduce_sum(tf.square(A), axis=2, keepdims=True)
+        dotB = tf.reduce_sum(tf.square(B), axis=2, keepdims=True)
+        dotB = tf.transpose(dotB, [0, 2, 1])
         return sub + dotA + dotB
 
 
@@ -176,7 +174,7 @@ class GravNetLayer(keras.layers.Layer):
         # neighbour aggregation
         neigh = self.core(coords, fprop)
 
-        merged = ops.concatenate([x, neigh], axis=-1)
+        merged = tf.concat([x, neigh], axis=-1)
 
         out = self.output_feature_transform(merged)
 

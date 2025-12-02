@@ -1,6 +1,6 @@
 # pyright: reportMissingImports=false
 
-from keras import layers
+from tensorflow.keras import layers
 
 
 def pairwise_concatenate(tensors, axis=-1, name_prefix="pairwise_concat"):
