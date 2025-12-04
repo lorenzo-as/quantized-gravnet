@@ -72,12 +72,13 @@ class GravNetCore(keras.layers.Layer):
         super().__init__(name=name, **kwargs)
         self.n_neighbours = n_neighbours
 
-    def call(self, coords, feats):
+    def call(self, inputs):
         """
         coords: (B, V, S)
         feats:  (B, V, F_prop)
         returns: aggregated features (B, V, 2*F_prop) -> concat([fmax, fmean])
         """
+        coords, feats = inputs
         B = tf.shape(feats)[0]
         V = tf.shape(feats)[1]
 

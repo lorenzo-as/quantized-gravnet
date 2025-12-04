@@ -121,7 +121,7 @@ class QGravNetFactory:
                 )(fprop)
 
             coords = input_spatial_transform(x)
-            neigh = core(coords, fprop)
+            neigh = core([coords, fprop])
             merged = layers.Concatenate(name=f"{block_prefix}_merge")([x, neigh])
 
             out = output_feature_transform(merged)
