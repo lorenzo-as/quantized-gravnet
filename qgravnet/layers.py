@@ -6,11 +6,10 @@ Adapted from https://github.com/jkiesele/caloGraphNN/blob/6d1127d807bc0dbaefcf1e
 import warnings
 
 import keras
-from keras import ops
+import keras.backend as K
 from qkeras import QDense
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers
 
 
 class GlobalExchange(keras.layers.Layer):
@@ -29,20 +28,19 @@ class GlobalExchange(keras.layers.Layer):
 
     def call(self, x):
         # x: (B, V, F)
-        assert ops.ndim(x) == 3, (
-            f"GlobalExchange expects input of shape (B, V, F) but received shape {ops.shape(x)}"
-        )
+        if K.ndim(x) != 3:
+            raise ValueError(f"GlobalExchange expects input of shape (B, V, F) but received shape {K.int_shape(x)}")
 
-        mean = ops.mean(x, axis=1, keepdims=True)  # (B, 1, F)
-        vmin = ops.min(x, axis=1, keepdims=True)  # (B, 1, F)
-        vmax = ops.max(x, axis=1, keepdims=True)  # (B, 1, F)
+        mean = K.mean(x, axis=1, keepdims=True)  # (B, 1, F)
+        vmin = K.min(x, axis=1, keepdims=True)  # (B, 1, F)
+        vmax = K.max(x, axis=1, keepdims=True)  # (B, 1, F)
 
-        stats = ops.concatenate([mean, vmin, vmax], axis=-1)  # (B, 1, 3F)
+        stats = K.concatenate([mean, vmin, vmax], axis=-1)  # (B, 1, 3F)
 
-        V = ops.shape(x)[1]
-        stats = ops.tile(stats, [1, V, 1])  # (B, V, 3F)
+        V = tf.shape(x)[1]
+        stats = tf.tile(stats, [1, V, 1])  # (B, V, 3F)
 
-        return ops.concatenate([stats, x], axis=-1)  # (B, V, 4F) [mean, min, max, x]
+        return K.concatenate([stats, x], axis=-1)  # (B, V, 4F) [mean, min, max, x]
 
     def compute_output_shape(
         self, input_shape
