@@ -1,11 +1,11 @@
 from .factory import QGravNetFactory
-from .layers import QGravNetLayer, global_exchange
+from .layers import GlobalExchange, QGravNetLayer
 from .model import QGravNetBlock, QGravNetModel
 
 __all__ = [
     "QGravNetModel",
     "QGravNetBlock",
     "QGravNetLayer",
-    "global_exchange",
+    "GlobalExchange",
     "QGravNetFactory",
 ]

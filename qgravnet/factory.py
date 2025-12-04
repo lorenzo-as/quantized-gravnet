@@ -6,8 +6,7 @@ from qkeras import QDense
 from tensorflow import keras
 from tensorflow.keras import layers
 
-from .layers import GravNetCore, global_exchange
-from .utils import pairwise_concatenate
+from .layers import GlobalExchange, GravNetCore
 
 
 class QGravNetFactory:
@@ -55,9 +54,9 @@ class QGravNetFactory:
     def create_keras_model(self, n_vertices: int, n_features: int) -> keras.Model:
         inputs = keras.Input(shape=(n_vertices, n_features), name="gravnet_input")
 
-        # Input BN + global exchange + linear
-        x = layers.BatchNormalization(name="input_bn")(inputs)
-        x = global_exchange(x, n_vertices, n_features, prefix="input_gex")
+        # Input BN + global exchange + linear to 64 (on 4*input_dim features)
+        x = keras.layers.BatchNormalization(name="input_bn")(inputs)
+        x = GlobalExchange(name="input_gex")(x)
         x = QDense(
             self.dense_layer_dims["input_dense"],
             activation=None,
@@ -144,9 +143,8 @@ class QGravNetFactory:
                 name=f"{block_prefix}_dense1",
             )(out)
 
-            out = global_exchange(
-                out, n_vertices, self.n_filters, prefix=f"{block_prefix}_gex"
-            )
+            # Global exchange + output (Linear(4*n_filters -> n_filters) + Tanh + BN)
+            out = GlobalExchange(name=f"{block_prefix}_gex")(out)
             out = QDense(
                 self.n_filters,
                 activation="tanh",
@@ -159,7 +157,12 @@ class QGravNetFactory:
             feat_list.append(out)
             x = out
 
-        x = pairwise_concatenate(feat_list, name_prefix="final_concat")
+        # Concatenate features from all blocks - do this iteratively for hls4ml compatibility
+        for i, feat in enumerate(feat_list, start=1):
+            if i == 1:
+                x = feat
+            else:
+                x = keras.layers.Concatenate(name=f"final_concat_{i}")([x, feat])
 
         # Post-GravNet dense layers: repeated (Dense(ReLU) + BN)
         for i in range(self.n_postgn_dense_blocks):
