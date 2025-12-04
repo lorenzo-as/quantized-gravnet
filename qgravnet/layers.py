@@ -112,7 +112,11 @@ class GravNetCore(keras.layers.Layer):
         dotB = tf.reduce_sum(tf.square(B), axis=2, keepdims=True)
         dotB = tf.transpose(dotB, [0, 2, 1])
         return sub + dotA + dotB
-
+    
+    def get_config(self):
+        config = super().get_config()
+        config.update({'n_neighbours': self.n_neighbours})
+        return config
 
 class GravNetLayer(keras.layers.Layer):
     """
