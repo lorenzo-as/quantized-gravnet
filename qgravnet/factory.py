@@ -55,8 +55,7 @@ class QGravNetFactory:
         inputs = keras.Input(shape=(n_vertices, n_features), name="gravnet_input")
 
         # Input BN + global exchange + linear to 64 (on 4*input_dim features)
-        x = keras.layers.BatchNormalization(name="input_bn")(inputs)
-        x = GlobalExchange(name="input_gex")(x)
+        x = GlobalExchange(name="input_gex")(inputs)
         x = QDense(
             self.dense_layer_dims["input_dense"],
             activation=None,
@@ -126,18 +125,16 @@ class QGravNetFactory:
             out = output_feature_transform(merged)
 
             # Post-GravNet: BN -> Dense(tanh) -> BN -> Dense(n_filters,tanh)
-            out = layers.BatchNormalization(name=f"{block_prefix}_bn0")(out)
             out = QDense(
                 self.dense_layer_dims["post_gn"],
-                activation="tanh",
+                activation=gkw.get("post_gn_activation", "tanh"),
                 kernel_quantizer=self.dense_kernel_quantizer,
                 bias_quantizer=self.dense_bias_quantizer,
                 name=f"{block_prefix}_dense0",
             )(out)
-            out = layers.BatchNormalization(name=f"{block_prefix}_bn1")(out)
             out = QDense(
                 self.n_filters,
-                activation="tanh",
+                activation=gkw.get("post_gn_out_activation", "tanh"),
                 kernel_quantizer=self.dense_kernel_quantizer,
                 bias_quantizer=self.dense_bias_quantizer,
                 name=f"{block_prefix}_dense1",
@@ -147,12 +144,11 @@ class QGravNetFactory:
             out = GlobalExchange(name=f"{block_prefix}_gex")(out)
             out = QDense(
                 self.n_filters,
-                activation="tanh",
+                activation=gkw.get('post_gn_gex_activation', "tanh"),
                 kernel_quantizer=self.dense_kernel_quantizer,
                 bias_quantizer=self.dense_bias_quantizer,
                 name=f"{block_prefix}_out_dense",
             )(out)
-            out = layers.BatchNormalization(name=f"{block_prefix}_out_bn")(out)
 
             feat_list.append(out)
             x = out
@@ -168,23 +164,22 @@ class QGravNetFactory:
         for i in range(self.n_postgn_dense_blocks):
             x = QDense(
                 self.dense_layer_dims["postgn_block"],
-                activation="relu",
+                activation=gkw.get("post_gn_relu", "relu"),
                 kernel_quantizer=self.dense_kernel_quantizer,
                 bias_quantizer=self.dense_bias_quantizer,
                 name=f"postgn_dense_{i}",
             )(x)
-            x = layers.BatchNormalization(name=f"postgn_bn_{i}")(x)
 
         x = QDense(
             self.dense_layer_dims["out0"],
-            activation="relu",
+            activation=gkw.get("post_gn_relu", "relu"),
             kernel_quantizer=self.dense_kernel_quantizer,
             bias_quantizer=self.dense_bias_quantizer,
             name="out0",
         )(x)
         x = QDense(
             self.dense_layer_dims["out1"],
-            activation="relu",
+            activation=gkw.get("post_gn_relu", "relu"),
             kernel_quantizer=self.dense_kernel_quantizer,
             bias_quantizer=self.dense_bias_quantizer,
             name="out1",
@@ -195,13 +190,13 @@ class QGravNetFactory:
             energies = QDense(
                 1,
                 activation=None,
-                kernel_quantizer=self.dense_kernel_quantizer,
-                bias_quantizer=self.dense_bias_quantizer,
+                kernel_quantizer=gkw.get("regression_kernel_quantizer", self.dense_kernel_quantizer),
+                bias_quantizer=gkw.get("regression_bias_quantizer", self.dense_bias_quantizer),
                 name="regression",
             )(x)
             classes = QDense(
                 1,
-                activation="sigmoid",
+                activation=gkw.get("classification_activation", "sigmoid"),
                 kernel_quantizer=self.dense_kernel_quantizer,
                 bias_quantizer=self.dense_bias_quantizer,
                 name="classification",
