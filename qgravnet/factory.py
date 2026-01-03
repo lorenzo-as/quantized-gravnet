@@ -131,12 +131,14 @@ class QGravNetFactory:
                 kernel_quantizer=self.dense_kernel_quantizer,
                 bias_quantizer=self.dense_bias_quantizer,
                 name=f"{block_prefix}_dense0",
+                kernel_initializer=gkw.get("other_kernel_initializer", "glorot_uniform"),
             )(out)
             out = QDense(
                 self.n_filters,
                 activation=gkw.get("post_gn_out_activation", "tanh"),
                 kernel_quantizer=self.dense_kernel_quantizer,
                 bias_quantizer=self.dense_bias_quantizer,
+                kernel_initializer=gkw.get("other_kernel_initializer", "glorot_uniform"),
                 name=f"{block_prefix}_dense1",
             )(out)
 
@@ -147,6 +149,7 @@ class QGravNetFactory:
                 activation=gkw.get('post_gn_gex_activation', "tanh"),
                 kernel_quantizer=self.dense_kernel_quantizer,
                 bias_quantizer=self.dense_bias_quantizer,
+                kernel_initializer=gkw.get("other_kernel_initializer", "glorot_uniform"),
                 name=f"{block_prefix}_out_dense",
             )(out)
 
