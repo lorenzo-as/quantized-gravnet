@@ -64,7 +64,6 @@ class QGravNetFactory:
             name="input_dense",
         )(x)
 
-        feat_list = []
         for ib in range(self.n_blocks):
             block_prefix = f"qgnblock_{ib}"
             gkw = self.gravnet_kwargs.copy()
@@ -153,15 +152,7 @@ class QGravNetFactory:
                 name=f"{block_prefix}_out_dense",
             )(out)
 
-            feat_list.append(out)
             x = out
-
-        # Concatenate features from all blocks - do this iteratively for hls4ml compatibility
-        for i, feat in enumerate(feat_list, start=1):
-            if i == 1:
-                x = feat
-            else:
-                x = keras.layers.Concatenate(name=f"final_concat_{i}")([x, feat])
 
         # Post-GravNet dense layers: repeated (Dense(ReLU) + BN)
         for i in range(self.n_postgn_dense_blocks):
