@@ -63,16 +63,17 @@ class GravNetCore(keras.layers.Layer):
     def __init__(self, n_neighbours: int, distance_metric: Literal["l1", "l2_squared"] = "l1", name: str | None = None, **kwargs):
         super().__init__(name=name, **kwargs)
         self.n_neighbours = n_neighbours
+        self.distance_metric = distance_metric
 
         distance_fns = {
             "l1": self._l1_distance,
             "l2_squared": self._l2_squared_distance,
         }
 
-        if distance_metric not in distance_fns:
+        if self.distance_metric not in distance_fns:
             raise ValueError(f"Unknown distance_metric: {distance_metric}")
 
-        self._distance_fn = distance_fns[distance_metric]
+        self._distance_fn = distance_fns[self.distance_metric]
 
     def call(self, inputs):
         """
@@ -124,7 +125,7 @@ class GravNetCore(keras.layers.Layer):
     
     def get_config(self):
         config = super().get_config()
-        config.update({'n_neighbours': self.n_neighbours})
+        config.update({'n_neighbours': self.n_neighbours, 'distance_metric': self.distance_metric})
         return config
 
 class GravNetLayer(keras.layers.Layer):
