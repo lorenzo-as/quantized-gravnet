@@ -3,6 +3,7 @@ Adapted from https://github.com/jkiesele/caloGraphNN/blob/6d1127d807bc0dbaefcf1e
 """
 
 # pyright: reportMissingImports=false
+from typing import Literal
 import warnings
 
 import keras
@@ -59,10 +60,19 @@ class GravNetCore(keras.layers.Layer):
     Returns:
         aggregated features (B, V, 2*F_prop) -> concat([fmax, fmean])
     """
-
-    def __init__(self, n_neighbours: int, name: str | None = None, **kwargs):
+    def __init__(self, n_neighbours: int, distance_metric: Literal["l1", "l2_squared"] = "l1", name: str | None = None, **kwargs):
         super().__init__(name=name, **kwargs)
         self.n_neighbours = n_neighbours
+
+        distance_fns = {
+            "l1": self._l1_distance,
+            "l2_squared": self._l2_squared_distance,
+        }
+
+        if distance_metric not in distance_fns:
+            raise ValueError(f"Unknown distance_metric: {distance_metric}")
+
+        self._distance_fn = distance_fns[distance_metric]
 
     def call(self, inputs):
         """
@@ -75,7 +85,7 @@ class GravNetCore(keras.layers.Layer):
         V = tf.shape(feats)[1]
 
         # squared distances (B, V, V)
-        dist = self._euclidean_squared(coords, coords)
+        dist = self._distance_fn(coords, coords)
 
         dist = (
             dist + tf.repeat(tf.expand_dims(tf.eye(V, V), axis=0), B, axis=0) * 1e9
@@ -98,12 +108,19 @@ class GravNetCore(keras.layers.Layer):
         return tf.concat([fmax, fmean], axis=-1)
 
     @staticmethod
-    def _euclidean_squared(A, B):
+    def _l2_squared_distance(A, B):
         sub = -2.0 * tf.matmul(A, tf.transpose(B, [0, 2, 1]))
         dotA = tf.reduce_sum(tf.square(A), axis=2, keepdims=True)
         dotB = tf.reduce_sum(tf.square(B), axis=2, keepdims=True)
         dotB = tf.transpose(dotB, [0, 2, 1])
         return sub + dotA + dotB
+
+    @staticmethod
+    def _l1_distance(A, B):
+        return tf.reduce_sum(
+            tf.abs(A[:, :, None, :] - B[:, None, :, :]),
+            axis=-1
+        )
     
     def get_config(self):
         config = super().get_config()
