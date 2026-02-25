@@ -6,7 +6,8 @@ from qkeras import QDense
 from tensorflow import keras
 from tensorflow.keras import layers
 
-from .layers import GlobalExchange, GravNetCore
+from .layers import GlobalExchange
+from .core import GravNetCore
 
 
 class QGravNetFactory:
@@ -23,11 +24,12 @@ class QGravNetFactory:
         distance_metric: Literal["l1", "l2_squared"] = "l2_squared",
         dense_kernel_quantizer=None,
         dense_bias_quantizer=None,
-        gravnet_kwargs: Optional[Dict] = None,
+        gravnet_cfg: Optional[Dict] = None,
+        selector_cfg: Optional[Dict] = None,
         dense_layer_dims: Optional[Dict[str, int]] = None,
     ):
-        if gravnet_kwargs is None:
-            gravnet_kwargs = {}
+        if gravnet_cfg is None:
+            gravnet_cfg = {}
 
         self.n_blocks = n_blocks
         self.n_neighbours = n_neighbours
@@ -41,7 +43,7 @@ class QGravNetFactory:
 
         self.dense_kernel_quantizer = dense_kernel_quantizer
         self.dense_bias_quantizer = dense_bias_quantizer
-        self.gravnet_kwargs = gravnet_kwargs
+        self.gravnet_cfg = gravnet_cfg
 
         self.dense_layer_dims = {
             "input_dense": 64,
@@ -68,7 +70,7 @@ class QGravNetFactory:
 
         for ib in range(self.n_blocks):
             block_prefix = f"qgnblock_{ib}"
-            gkw = self.gravnet_kwargs.copy()
+            gkw = self.gravnet_cfg.copy()
 
             # Input feature transform: F_in -> F_prop
             input_feature_transform = QDense(

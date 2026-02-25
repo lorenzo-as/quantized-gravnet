@@ -5,13 +5,13 @@ import tensorflow as tf
 
 def test_gravnetcore_neighbors():
     """Ensure GravNetCore neighbor aggregation returns correct shape and no NaNs."""
-    from qgravnet.layers import GravNetCore
+    from qgravnet.core import GravNetCore
 
     core = GravNetCore(n_neighbours=5, name="core")
     coords = tf.random.normal((1, 20, 4))
     feats = tf.random.normal((1, 20, 6))
 
-    out = core(coords, feats)
+    out = core([coords, feats])
 
     # output = concat([fmax, fmean]) -> shape (B, V, 2 * F_prop)
     assert out.shape == (1, 20, 12)
