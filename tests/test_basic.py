@@ -44,7 +44,9 @@ def test_factory_model_dual_head(factory_cls):
     """Test that both factory variants build a dual-head model and run a forward pass."""
     from qgravnet import factory as factory_module
 
-    factory = getattr(factory_module, factory_cls)(n_blocks=2, n_neighbours=4, output_head="dual")
+    factory = getattr(factory_module, factory_cls)(
+        n_blocks=2, n_neighbours=4, output_head="dual"
+    )
     model = factory.create_keras_model(n_vertices=16, n_features=8)
 
     x = tf.random.normal((1, 16, 8))

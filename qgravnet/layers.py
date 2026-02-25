@@ -3,7 +3,6 @@ Adapted from https://github.com/jkiesele/caloGraphNN/blob/6d1127d807bc0dbaefcf1e
 """
 
 # pyright: reportMissingImports=false
-from typing import Literal
 import warnings
 
 from qkeras import QDense
@@ -32,7 +31,9 @@ class GlobalExchange(keras.layers.Layer):
     def call(self, x):
         # x: (B, V, F)
         if K.ndim(x) != 3:
-            raise ValueError(f"GlobalExchange expects input of shape (B, V, F) but received shape {K.int_shape(x)}")
+            raise ValueError(
+                f"GlobalExchange expects input of shape (B, V, F) but received shape {K.int_shape(x)}"
+            )
 
         mean = K.mean(x, axis=1, keepdims=True)  # (B, 1, F)
         vmin = K.min(x, axis=1, keepdims=True)  # (B, 1, F)
@@ -50,6 +51,7 @@ class GlobalExchange(keras.layers.Layer):
     ):  # with ops.tile, static shape info appears to be lost vs tf.tile thus this is needed
         B, V, F = input_shape
         return (B, V, 4 * F)
+
 
 class GravNetLayer(keras.layers.Layer):
     """
@@ -92,7 +94,9 @@ class GravNetLayer(keras.layers.Layer):
             self.dropout = keras.layers.Dropout(feature_dropout)
 
         self.core = GravNetCore(
-            self.n_neighbours, selector=selector, name=(name + "_core") if name else None
+            self.n_neighbours,
+            selector=selector,
+            name=(name + "_core") if name else None,
         )
 
     def call(self, x, training=False):

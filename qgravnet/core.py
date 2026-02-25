@@ -1,9 +1,10 @@
+# pyright: reportMissingImports=false
 from typing import Literal
 
 import tensorflow as tf
 from tensorflow import keras
 
-from .selectors import NeighbourSelector, FullSelector
+from .selectors import FullSelector, NeighbourSelector
 
 
 class GravNetCore(keras.layers.Layer):
@@ -16,13 +17,14 @@ class GravNetCore(keras.layers.Layer):
     Returns:
         aggregated features (B, V, 2*F_prop) -> concat([fmax, fmean])
     """
+
     def __init__(
-        self, 
-        n_neighbours: int, 
-        distance_metric: Literal["l1", "l2_squared"] = "l1", 
-        selector: NeighbourSelector | None = None, 
-        name: str | None = None, 
-        **kwargs
+        self,
+        n_neighbours: int,
+        distance_metric: Literal["l1", "l2_squared"] = "l1",
+        selector: NeighbourSelector | None = None,
+        name: str | None = None,
+        **kwargs,
     ):
         super().__init__(name=name, **kwargs)
         self.n_neighbours = n_neighbours
@@ -46,8 +48,6 @@ class GravNetCore(keras.layers.Layer):
         returns: aggregated features (B, V, 2*F_prop) -> concat([fmax, fmean])
         """
         coords, feats = inputs
-        B = tf.shape(feats)[0]
-        V = tf.shape(feats)[1]
 
         # squared distances (B, V, V)
         dist = self._distance_fn(coords, coords)
@@ -93,12 +93,11 @@ class GravNetCore(keras.layers.Layer):
 
     @staticmethod
     def _l1_distance(A, B):
-        return tf.reduce_sum(
-            tf.abs(A[:, :, None, :] - B[:, None, :, :]),
-            axis=-1
-        )
-    
+        return tf.reduce_sum(tf.abs(A[:, :, None, :] - B[:, None, :, :]), axis=-1)
+
     def get_config(self):
         config = super().get_config()
-        config.update({'n_neighbours': self.n_neighbours, 'distance_metric': self.distance_metric})
+        config.update(
+            {"n_neighbours": self.n_neighbours, "distance_metric": self.distance_metric}
+        )
         return config

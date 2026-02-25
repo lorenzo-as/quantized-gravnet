@@ -1,15 +1,21 @@
+# pyright: reportMissingImports=false
+
 import tensorflow as tf
 
 REGISTRY = {}
+
 
 def register(name):
     def decorator(cls):
         REGISTRY[name] = cls
         return cls
+
     return decorator
+
 
 class NeighbourSelector:
     """Interface for restricting neighbour search in GravNetCore."""
+
     def restrict(self, dist, coords):
         """Restrict the distance matrix for neighbour search.
 
@@ -22,11 +28,14 @@ class NeighbourSelector:
         """
         raise NotImplementedError
 
+
 @register("full")
 class FullSelector(NeighbourSelector):
     """No restriction, use full pairwise distance matrix for neighbour search."""
+
     def restrict(self, dist, coords):
         return dist
+
 
 @register("binned")
 class BinnedSelector(NeighbourSelector):
@@ -47,7 +56,13 @@ class BinnedSelector(NeighbourSelector):
             Maximum coordinate value for binning. Coordinates above this will be clipped to this value.
     """
 
-    def __init__(self, bins_per_axis: int, window: int = 1, clip_min: float = -1.0, clip_max: float = 1.0):
+    def __init__(
+        self,
+        bins_per_axis: int,
+        window: int = 1,
+        clip_min: float = -1.0,
+        clip_max: float = 1.0,
+    ):
         self.bins_per_axis = bins_per_axis
         self.window = window
         self.clip_min = clip_min
@@ -78,7 +93,7 @@ class BinnedSelector(NeighbourSelector):
         large = tf.constant(1e9, dtype=dist.dtype)
         dist_masked = tf.where(mask, dist, large)
         return dist_masked
-    
+
     def clipping_statistics(self, coords):
         below = coords < self.clip_min
         above = coords > self.clip_max
@@ -92,4 +107,3 @@ class BinnedSelector(NeighbourSelector):
             "n_above": n_above,
             "fraction_clipped": (n_below + n_above) / total if total > 0 else 0.0,
         }
-

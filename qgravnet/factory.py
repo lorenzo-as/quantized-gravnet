@@ -6,8 +6,8 @@ from qkeras import QDense
 from tensorflow import keras
 from tensorflow.keras import layers
 
-from .layers import GlobalExchange
 from .core import GravNetCore
+from .layers import GlobalExchange
 from .selectors import REGISTRY as SELECTOR_REGISTRY
 
 
@@ -39,8 +39,10 @@ class GravNetFactory:
         self.n_postgn_dense_blocks = n_postgn_dense_blocks
         self.output_dim = output_dim
         self.output_head = output_head
-        self.distance_metric = distance_metric
-        self.neighbour_selector = SELECTOR_REGISTRY[neighbour_selector](**(selector_cfg or {}))
+        self.distance_metric: Literal["l1", "l2_squared"] = distance_metric
+        self.neighbour_selector = SELECTOR_REGISTRY[neighbour_selector](
+            **(selector_cfg or {})
+        )
         self.gravnet_cfg = gravnet_cfg
 
         self.dense_layer_dims = {
@@ -83,28 +85,33 @@ class GravNetFactory:
 
         for ib in range(self.n_blocks):
             block_prefix = f"qgnblock_{ib}"
-            gkw = self.gravnet_cfg.copy()
 
             # Input feature transform: F_in → F_prop
             input_feature_transform = self._make_dense(
                 self.n_propagate,
-                kernel_initializer=gkw.get("other_kernel_initializer", "glorot_uniform"),
-                kernel_quantizer=gkw.get("feature_kernel_quantizer", None),
-                bias_quantizer=gkw.get("feature_bias_quantizer", None),
-                activation=gkw.get("feature_activation", None),
+                kernel_initializer=self.gravnet_cfg.get(
+                    "other_kernel_initializer", "glorot_uniform"
+                ),
+                kernel_quantizer=self.gravnet_cfg.get("feature_kernel_quantizer", None),
+                bias_quantizer=self.gravnet_cfg.get("feature_bias_quantizer", None),
+                activation=self.gravnet_cfg.get("feature_activation", None),
                 name=f"{block_prefix}_input_feature_transform",
             )
 
             # Input spatial transform: F_in → S (latent coordinate space)
-            if not gkw.get("fix_coordinate_space", False):
+            if not self.gravnet_cfg.get("fix_coordinate_space", False):
                 input_spatial_transform = self._make_dense(
                     self.n_dimensions,
-                    kernel_initializer=gkw.get(
+                    kernel_initializer=self.gravnet_cfg.get(
                         "coordinate_kernel_initializer", keras.initializers.Orthogonal()
                     ),
-                    kernel_quantizer=gkw.get("coordinate_kernel_quantizer", None),
-                    bias_quantizer=gkw.get("coordinate_bias_quantizer", None),
-                    activation=gkw.get("coordinate_activation", None),
+                    kernel_quantizer=self.gravnet_cfg.get(
+                        "coordinate_kernel_quantizer", None
+                    ),
+                    bias_quantizer=self.gravnet_cfg.get(
+                        "coordinate_bias_quantizer", None
+                    ),
+                    activation=self.gravnet_cfg.get("coordinate_activation", None),
                     name=f"{block_prefix}_input_spatial_transform",
                 )
             else:
@@ -113,10 +120,12 @@ class GravNetFactory:
             # Output feature transform: concat([x, neigh]) → n_filters
             output_feature_transform = self._make_dense(
                 self.n_filters,
-                kernel_initializer=gkw.get("other_kernel_initializer", "glorot_uniform"),
-                kernel_quantizer=gkw.get("output_kernel_quantizer", None),
-                bias_quantizer=gkw.get("output_bias_quantizer", None),
-                activation=gkw.get("output_activation", "tanh"),
+                kernel_initializer=self.gravnet_cfg.get(
+                    "other_kernel_initializer", "glorot_uniform"
+                ),
+                kernel_quantizer=self.gravnet_cfg.get("output_kernel_quantizer", None),
+                bias_quantizer=self.gravnet_cfg.get("output_bias_quantizer", None),
+                activation=self.gravnet_cfg.get("output_activation", "tanh"),
                 name=f"{block_prefix}_output_feature_transform",
             )
 
@@ -128,9 +137,10 @@ class GravNetFactory:
             )
 
             fprop = input_feature_transform(x)
-            if 0.0 < gkw.get("feature_dropout", -1.0) < 1.0:
+            if 0.0 < self.gravnet_cfg.get("feature_dropout", -1.0) < 1.0:
                 fprop = layers.Dropout(
-                    gkw.get("feature_dropout"), name=f"{block_prefix}_dropout"
+                    self.gravnet_cfg.get("feature_dropout"),
+                    name=f"{block_prefix}_dropout",
                 )(fprop)
 
             coords = input_spatial_transform(x)
@@ -141,22 +151,28 @@ class GravNetFactory:
 
             out = self._make_dense(
                 self.dense_layer_dims["post_gn"],
-                activation=gkw.get("post_gn_activation", "tanh"),
-                kernel_initializer=gkw.get("other_kernel_initializer", "glorot_uniform"),
+                activation=self.gravnet_cfg.get("post_gn_activation", "tanh"),
+                kernel_initializer=self.gravnet_cfg.get(
+                    "other_kernel_initializer", "glorot_uniform"
+                ),
                 name=f"{block_prefix}_dense0",
             )(out)
             out = self._make_dense(
                 self.n_filters,
-                activation=gkw.get("post_gn_out_activation", "tanh"),
-                kernel_initializer=gkw.get("other_kernel_initializer", "glorot_uniform"),
+                activation=self.gravnet_cfg.get("post_gn_out_activation", "tanh"),
+                kernel_initializer=self.gravnet_cfg.get(
+                    "other_kernel_initializer", "glorot_uniform"
+                ),
                 name=f"{block_prefix}_dense1",
             )(out)
 
             out = GlobalExchange(name=f"{block_prefix}_gex")(out)
             out = self._make_dense(
                 self.n_filters,
-                activation=gkw.get("post_gn_gex_activation", "tanh"),
-                kernel_initializer=gkw.get("other_kernel_initializer", "glorot_uniform"),
+                activation=self.gravnet_cfg.get("post_gn_gex_activation", "tanh"),
+                kernel_initializer=self.gravnet_cfg.get(
+                    "other_kernel_initializer", "glorot_uniform"
+                ),
                 name=f"{block_prefix}_out_dense",
             )(out)
 
@@ -166,18 +182,18 @@ class GravNetFactory:
         for i in range(self.n_postgn_dense_blocks):
             x = self._make_dense(
                 self.dense_layer_dims["postgn_block"],
-                activation=gkw.get("post_gn_relu", "relu"),
+                activation=self.gravnet_cfg.get("post_gn_relu", "relu"),
                 name=f"postgn_dense_{i}",
             )(x)
 
         x = self._make_dense(
             self.dense_layer_dims["out0"],
-            activation=gkw.get("post_gn_relu", "relu"),
+            activation=self.gravnet_cfg.get("post_gn_relu", "relu"),
             name="out0",
         )(x)
         x = self._make_dense(
             self.dense_layer_dims["out1"],
-            activation=gkw.get("post_gn_relu", "relu"),
+            activation=self.gravnet_cfg.get("post_gn_relu", "relu"),
             name="out1",
         )(x)
 
@@ -186,13 +202,15 @@ class GravNetFactory:
             energies = self._make_dense(
                 1,
                 activation=None,
-                kernel_quantizer=gkw.get("regression_kernel_quantizer", None),
-                bias_quantizer=gkw.get("regression_bias_quantizer", None),
+                kernel_quantizer=self.gravnet_cfg.get(
+                    "regression_kernel_quantizer", None
+                ),
+                bias_quantizer=self.gravnet_cfg.get("regression_bias_quantizer", None),
                 name="regression",
             )(x)
             classes = self._make_dense(
                 1,
-                activation=gkw.get("classification_activation", "sigmoid"),
+                activation=self.gravnet_cfg.get("classification_activation", "sigmoid"),
                 name="classification",
             )(x)
 
