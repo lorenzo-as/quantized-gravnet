@@ -1,5 +1,7 @@
 # pyright: reportMissingImports=false
 
+import numpy as np
+import pytest
 import tensorflow as tf
 
 
@@ -37,11 +39,12 @@ def test_qgravnetlayer_forward():
     assert not bool(tf.reduce_any(tf.math.is_nan(y)))
 
 
-def test_factory_model_dual_head():
-    """Test that QGravNetFactory builds a dual-head model and runs a forward pass."""
-    from qgravnet.factory import QGravNetFactory
+@pytest.mark.parametrize("factory_cls", ["GravNetFactory", "QGravNetFactory"])
+def test_factory_model_dual_head(factory_cls):
+    """Test that both factory variants build a dual-head model and run a forward pass."""
+    from qgravnet import factory as factory_module
 
-    factory = QGravNetFactory(n_blocks=2, n_neighbours=4, output_head="dual")
+    factory = getattr(factory_module, factory_cls)(n_blocks=2, n_neighbours=4, output_head="dual")
     model = factory.create_keras_model(n_vertices=16, n_features=8)
 
     x = tf.random.normal((1, 16, 8))
@@ -54,11 +57,12 @@ def test_factory_model_dual_head():
     assert not bool(tf.reduce_any(tf.math.is_nan(classes)))
 
 
-def test_factory_model_oc_head():
-    """Test that QGravNetFactory builds an OC-style model and runs a forward pass."""
-    from qgravnet.factory import QGravNetFactory
+@pytest.mark.parametrize("factory_cls", ["GravNetFactory", "QGravNetFactory"])
+def test_factory_model_oc_head(factory_cls):
+    """Test that both factory variants build an OC-style model and run a forward pass."""
+    from qgravnet import factory as factory_module
 
-    factory = QGravNetFactory(
+    factory = getattr(factory_module, factory_cls)(
         n_blocks=2,
         n_neighbours=4,
         output_head="oc",
@@ -72,3 +76,30 @@ def test_factory_model_oc_head():
     # Shape should be (B, V, output_dim)
     assert out.shape == (1, 16, 5)
     assert not bool(tf.reduce_any(tf.math.is_nan(out)))
+
+
+def test_binned_selector_restrict_example_input():
+    """BinnedSelector should keep only in-bin neighbours for a simple example input."""
+    from qgravnet.selectors import BinnedSelector
+
+    selector = BinnedSelector(bins_per_axis=4, window=0, clip_min=-1.0, clip_max=1.0)
+
+    # One batch, four vertices, one coordinate dimension
+    coords = tf.constant([[[-0.9], [-0.8], [0.1], [0.9]]], dtype=tf.float32)
+    # Use true pairwise L2 distances computed from coords.
+    delta = coords[:, :, None, :] - coords[:, None, :, :]
+    dist = tf.norm(delta, axis=-1)
+
+    restricted = selector.restrict(dist, coords).numpy()
+
+    large = 1e9
+    expected = [
+        [
+            [0.0, 0.1, large, large],
+            [0.1, 0.0, large, large],
+            [large, large, 0.0, large],
+            [large, large, large, 0.0],
+        ]
+    ]
+
+    np.testing.assert_allclose(restricted, expected, atol=1e-6)
