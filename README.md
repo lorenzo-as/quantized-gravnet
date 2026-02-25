@@ -5,9 +5,10 @@ A Tensorflow + QKeras-based implementation of the **GravNet** architecture.
 This package provides:
 - `GravNetCore` - the core neighbour-aggregation logic
 - `GlobalExchange` - feature broadcasting (mean/min/max)
-- `QGravNetLayer` - a quantized GravNet layer
+- `GravNetLayer` and `QGravNetLayer` - a (quantized) GravNet layer
 - `QGravNetBlock` and `QGravNetModel` - modular, multi-block GravNet using Keras subclassing
-- `QGravNetFactory` - factory class to build quantized GravNet models using the Keras Functional API
+- `GravNetFactory` and `QGravNetFactory` - factory class to build (quantized) GravNet models using the Keras Functional API
+- `NeighbourSelector` - extendable neighbour selection strategies for `GravNetCore` 
 
 ## Installation
 
@@ -38,6 +39,17 @@ https://github.com/jkiesele/caloGraphNN/blob/master/keras_models.py
 
 
 ## Example
+
+### Non-quantized model
+
+```python
+from qgravnet.factory import GravNetFactory
+model = GravNetFactory(n_blocks=4, n_neighbours=40).create_keras_model(n_vertices=128, n_features=16)
+
+model.summary()
+```
+
+### Quantized model
 
 ```python
 from qgravnet import QGravNetFactory
