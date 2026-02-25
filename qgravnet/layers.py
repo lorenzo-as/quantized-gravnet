@@ -12,6 +12,7 @@ from tensorflow import keras
 from tensorflow.keras import backend as K
 
 from .core import GravNetCore
+from .selectors import NeighbourSelector
 
 
 class GlobalExchange(keras.layers.Layer):
@@ -65,6 +66,7 @@ class GravNetLayer(keras.layers.Layer):
         output_feature_transform,
         n_neighbours,
         n_dimensions,
+        selector: NeighbourSelector | None = None,
         also_coordinates=False,
         feature_dropout=-1.0,
         fix_coordinate_space=False,
@@ -90,7 +92,7 @@ class GravNetLayer(keras.layers.Layer):
             self.dropout = keras.layers.Dropout(feature_dropout)
 
         self.core = GravNetCore(
-            self.n_neighbours, name=(name + "_core") if name else None
+            self.n_neighbours, selector=selector, name=(name + "_core") if name else None
         )
 
     def call(self, x, training=False):
@@ -135,6 +137,7 @@ class QGravNetLayer(keras.layers.Layer):
         n_filters,
         n_propagate,
         name,
+        selector: NeighbourSelector | None = None,
         also_coordinates=False,
         feature_dropout=-1.0,
         coordinate_kernel_initializer=keras.initializers.Orthogonal(),
@@ -209,6 +212,7 @@ class QGravNetLayer(keras.layers.Layer):
             output_feature_transform=output_feature_transform,
             n_neighbours=n_neighbours,
             n_dimensions=n_dimensions,
+            selector=selector,
             also_coordinates=also_coordinates,
             feature_dropout=feature_dropout,
             fix_coordinate_space=fix_coordinate_space,

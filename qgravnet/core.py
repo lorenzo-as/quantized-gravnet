@@ -3,6 +3,8 @@ from typing import Literal
 import tensorflow as tf
 from tensorflow import keras
 
+from .selectors import NeighbourSelector, FullSelector
+
 
 class GravNetCore(keras.layers.Layer):
     """
@@ -18,12 +20,14 @@ class GravNetCore(keras.layers.Layer):
         self, 
         n_neighbours: int, 
         distance_metric: Literal["l1", "l2_squared"] = "l1", 
+        selector: NeighbourSelector | None = None, 
         name: str | None = None, 
         **kwargs
     ):
         super().__init__(name=name, **kwargs)
         self.n_neighbours = n_neighbours
         self.distance_metric = distance_metric
+        self.selector = selector or FullSelector()
 
         distance_fns = {
             "l1": self._l1_distance,
@@ -49,6 +53,9 @@ class GravNetCore(keras.layers.Layer):
         dist = self._distance_fn(coords, coords)
 
         dist = self._mask_self(dist)
+
+        # restict neighbour search (approximate kNN)
+        dist = self.selector.restrict(dist, coords)
 
         ranked_distances, ranked_indices = tf.math.top_k(
             -dist, k=self.n_neighbours, sorted=True

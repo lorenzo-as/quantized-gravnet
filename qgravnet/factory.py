@@ -8,6 +8,7 @@ from tensorflow.keras import layers
 
 from .layers import GlobalExchange
 from .core import GravNetCore
+from .selectors import REGISTRY as SELECTOR_REGISTRY
 
 
 class QGravNetFactory:
@@ -22,6 +23,7 @@ class QGravNetFactory:
         output_dim: int = 4,
         output_head: Literal["dual", "oc"] = "dual",
         distance_metric: Literal["l1", "l2_squared"] = "l2_squared",
+        neighbour_selector: Literal["full", "binned"] = "full",
         dense_kernel_quantizer=None,
         dense_bias_quantizer=None,
         gravnet_cfg: Optional[Dict] = None,
@@ -40,6 +42,7 @@ class QGravNetFactory:
         self.output_dim = output_dim
         self.output_head = output_head
         self.distance_metric = distance_metric
+        self.neighbour_selector = SELECTOR_REGISTRY[neighbour_selector](**(selector_cfg or {}))
 
         self.dense_kernel_quantizer = dense_kernel_quantizer
         self.dense_bias_quantizer = dense_bias_quantizer
@@ -113,7 +116,7 @@ class QGravNetFactory:
                 name=f"{block_prefix}_output_feature_transform",
             )
 
-            core = GravNetCore(self.n_neighbours, distance_metric=self.distance_metric, name=f"{block_prefix}_core")
+            core = GravNetCore(self.n_neighbours, distance_metric=self.distance_metric, selector=self.neighbour_selector, name=f"{block_prefix}_core")
 
             fprop = input_feature_transform(x)
             if 0.0 < gkw.get("feature_dropout", -1.0) < 1.0:
