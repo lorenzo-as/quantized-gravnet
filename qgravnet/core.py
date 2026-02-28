@@ -73,15 +73,17 @@ class GravNetCore(keras.layers.Layer):
         fmax = tf.reduce_max(weighted, axis=2)
         fmean = tf.reduce_mean(weighted, axis=2)
         return tf.concat([fmax, fmean], axis=-1)
-
+    
     @staticmethod
     def _mask_self(dist):
         """Set self-distances to a large value to exclude self from nearest neighbours."""
+        B = tf.shape(dist)[0]
+        V = tf.shape(dist)[1]
+
+        eye = tf.eye(V, batch_shape=[B], dtype=dist.dtype)
         large = tf.constant(1e9, dtype=dist.dtype)
-        shape = tf.shape(dist)
-        B = shape[0]
-        V = shape[1]
-        return tf.linalg.set_diag(dist, tf.fill([B, V], large))
+
+        return dist + eye * large
 
     @staticmethod
     def _l2_squared_distance(A, B):
