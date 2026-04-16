@@ -1,0 +1,59 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools>=61.0"]
+
+[project]
+authors = [
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent"
+]
+dependencies = [
+  "tensorflow==2.14.0",
+  "qkeras==0.9.0",
+  "pyparsing>=3.0"
+]
+description = "A quantized QKeras-based implementation of the GravNet architecture."
+name = "quantized-gravnet"
+readme = "README.md"
+requires-python = ">=3.10, <3.12"
+version = "0.1.0"
+
+[project.optional-dependencies]
+dev = [
+  "pre-commit==4.3.0",
+  "pyright==1.1.407",
+  "pytest==8.4.2",
+  "ruff==0.13.3",
+  "toml-sort==0.23.1"
+]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+  "ignore::DeprecationWarning:tensorflow_model_optimization",
+  "ignore:.*distutils package is deprecated.*:DeprecationWarning",
+  "ignore:.*ml_dtypes.float8_e4m3b11 is deprecated.*:DeprecationWarning"
+]
+
+[tool.ruff]
+
+[tool.ruff.format]
+docstring-code-format = true
+indent-style = "space"
+quote-style = "double"
+
+[tool.ruff.lint]
+fixable = ["ALL"]
+ignore = ["E501"]
+select = ["E", "F", "I"]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+force-sort-within-sections = true
+known-first-party = ["qgravnet"]
+
+[tool.setuptools.packages.find]
+include = ["qgravnet*"]
+where = ["."]

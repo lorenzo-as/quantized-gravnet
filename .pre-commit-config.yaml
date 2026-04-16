@@ -1,0 +1,48 @@
+repos:
+  # Keep pyproject.toml sorted
+  - repo: local
+    hooks:
+      - id: sort_pyproject
+        name: sort_pyproject
+        entry: toml-sort -i --sort-table-keys --sort-inline-tables
+        language: python
+        files: ^pyproject\.toml$
+        additional_dependencies: ["toml-sort==0.23.1"]
+
+  # Ruff: formatter and linter
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.10
+    hooks:
+    - id: ruff-format
+      types_or: [python, pyi, jupyter, toml]
+      exclude: ^uv\.lock$
+
+    - id: ruff
+      types_or: [python, pyi, jupyter, toml]
+      args: ["--fix"]
+      exclude: ^uv\.lock$
+
+  # Pyright type checker
+  - repo: https://github.com/RobertCraigie/pyright-python
+    rev: v1.1.408
+    hooks:
+      - id: pyright
+        additional_dependencies:
+          [
+            typing_extensions,
+            pytest,
+            tensorflow==2.14.0,
+            qkeras==0.9.0,
+          ]
+
+  # YAML/TOML validation and misc checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-added-large-files
+        args: ["--maxkb=5000"]
