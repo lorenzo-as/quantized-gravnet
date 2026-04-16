@@ -14,6 +14,7 @@ from .core import GravNetCore
 from .selectors import NeighbourSelector
 
 
+@keras.saving.register_keras_serializable(package="qgravnet")
 class GlobalExchange(keras.layers.Layer):
     """
     Compute statistics (mean, min, max) over features for all vertices in the batch
@@ -25,6 +26,7 @@ class GlobalExchange(keras.layers.Layer):
 
     def __init__(self, vertex_mask=None, **kwargs):
         super().__init__(**kwargs)
+        self.vertex_mask = vertex_mask
         if vertex_mask is not None:
             raise NotImplementedError
 
@@ -52,7 +54,13 @@ class GlobalExchange(keras.layers.Layer):
         B, V, F = input_shape
         return (B, V, 4 * F)
 
+    def get_config(self):
+        config = super().get_config()
+        config.update({"vertex_mask": self.vertex_mask})
+        return config
 
+
+@keras.saving.register_keras_serializable(package="qgravnet")
 class GravNetLayer(keras.layers.Layer):
     """
     GravNet layer that accepts pre-constructed transform layers.
@@ -125,7 +133,49 @@ class GravNetLayer(keras.layers.Layer):
             return [out, coords]
         return out
 
+    def get_config(self):
+        config = super().get_config()
+        config.update(
+            {
+                "input_feature_transform": keras.saving.serialize_keras_object(
+                    self.input_feature_transform
+                ),
+                "input_spatial_transform": keras.saving.serialize_keras_object(
+                    self.input_spatial_transform
+                )
+                if self.input_spatial_transform is not None
+                else None,
+                "output_feature_transform": keras.saving.serialize_keras_object(
+                    self.output_feature_transform
+                ),
+                "n_neighbours": self.n_neighbours,
+                "n_dimensions": self.n_dimensions,
+                "selector": keras.saving.serialize_keras_object(self.core.selector),
+                "also_coordinates": self.also_coordinates,
+                "feature_dropout": self.feature_dropout,
+                "fix_coordinate_space": self.fix_coordinate_space,
+                "masked_coordinate_offset": self.masked_coordinate_offset,
+            }
+        )
+        return config
 
+    @classmethod
+    def from_config(cls, config):
+        config["input_feature_transform"] = keras.saving.deserialize_keras_object(
+            config["input_feature_transform"]
+        )
+        if config["input_spatial_transform"] is not None:
+            config["input_spatial_transform"] = keras.saving.deserialize_keras_object(
+                config["input_spatial_transform"]
+            )
+        config["output_feature_transform"] = keras.saving.deserialize_keras_object(
+            config["output_feature_transform"]
+        )
+        config["selector"] = keras.saving.deserialize_keras_object(config["selector"])
+        return cls(**config)
+
+
+@keras.saving.register_keras_serializable(package="qgravnet")
 class QGravNetLayer(keras.layers.Layer):
     """
     GravNetLayer wrapper that builds internal transforms with quantized layers.
@@ -226,3 +276,28 @@ class QGravNetLayer(keras.layers.Layer):
 
     def call(self, x, training=False):
         return self.gravnet(x, training=training)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update(
+            {
+                "n_neighbours": self.n_neighbours,
+                "n_dimensions": self.n_dimensions,
+                "n_filters": self.n_filters,
+                "n_propagate": self.n_propagate,
+                "selector": keras.saving.serialize_keras_object(
+                    self.gravnet.core.selector
+                ),
+                "also_coordinates": self.also_coordinates,
+                "feature_dropout": self.feature_dropout,
+                "coordinate_kernel_initializer": keras.initializers.serialize(
+                    self.coordinate_kernel_initializer
+                ),
+                "other_kernel_initializer": keras.initializers.serialize(
+                    keras.initializers.get(self.other_kernel_initializer)
+                ),
+                "fix_coordinate_space": self.fix_coordinate_space,
+                "masked_coordinate_offset": self.masked_coordinate_offset,
+            }
+        )
+        return config

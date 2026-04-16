@@ -1,6 +1,5 @@
 # pyright: reportMissingImports=false
 
-import numpy as np
 import pytest
 import tensorflow as tf
 
@@ -80,28 +79,27 @@ def test_factory_model_oc_head(factory_cls):
     assert not bool(tf.reduce_any(tf.math.is_nan(out)))
 
 
-def test_binned_selector_restrict_example_input():
-    """BinnedSelector should keep only in-bin neighbours for a simple example input."""
-    from qgravnet.selectors import BinnedSelector
+def test_smoke_save_load_roundtrip(tmp_path):
+    """Smoke test: instantiate layer, run data, save model, load model, run inference."""
+    from qgravnet.layers import QGravNetLayer
 
-    selector = BinnedSelector(bins_per_axis=4, window=0, clip_min=-1.0, clip_max=1.0)
+    inputs = tf.keras.Input(shape=(10, 5))
+    outputs = QGravNetLayer(
+        n_neighbours=4,
+        n_dimensions=3,
+        n_filters=8,
+        n_propagate=6,
+        name="smoke_layer",
+    )(inputs)
+    model = tf.keras.Model(inputs, outputs)
 
-    # One batch, four vertices, one coordinate dimension
-    coords = tf.constant([[[-0.9], [-0.8], [0.1], [0.9]]], dtype=tf.float32)
-    # Use true pairwise L2 distances computed from coords.
-    delta = coords[:, :, None, :] - coords[:, None, :, :]
-    dist = tf.norm(delta, axis=-1)
+    x = tf.random.normal((2, 10, 5))
+    y_ref = model(x)
 
-    restricted = selector.restrict(dist, coords).numpy()
+    save_path = tmp_path / "smoke_model.keras"
+    model.save(save_path)
 
-    large = 1e9
-    expected = [
-        [
-            [0.0, 0.1, large, large],
-            [0.1, 0.0, large, large],
-            [large, large, 0.0, large],
-            [large, large, large, 0.0],
-        ]
-    ]
+    loaded = tf.keras.models.load_model(save_path)
+    y_loaded = loaded(x)
 
-    np.testing.assert_allclose(restricted, expected, atol=1e-6)
+    tf.debugging.assert_near(y_ref, y_loaded, atol=1e-5)

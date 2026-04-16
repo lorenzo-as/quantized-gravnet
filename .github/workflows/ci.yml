@@ -2,9 +2,7 @@ name: QGravNet Tests
 
 on:
   push:
-    branches: [dev, qkeras-classic, qkeras-classic-adapt-for-hls4ml]
   pull_request:
-    branches: [dev, qkeras-classic, qkeras-classic-adapt-for-hls4ml]
 
 jobs:
   test:
@@ -25,21 +23,23 @@ jobs:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ github.ref }}-${{ hashFiles('**/pyproject.toml') }}
 
-      - name: Install deps (dev branch qkeras-v3 stack)
-        if: github.ref == 'refs/heads/dev'
+      - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install \
-            --index-url https://test.pypi.org/simple/ \
-            --extra-index-url https://pypi.org/simple \
-            qkeras-v3==1.0.3
-          pip install -e ".[dev]"
 
-      - name: Install deps (qkeras-classic branch TF-Keras + QKeras)
-        if: github.ref == 'refs/heads/qkeras-classic' || github.ref == 'refs/heads/qkeras-classic-adapt-for-hls4ml'
-        run: |
-          python -m pip install --upgrade pip
+          if [[ "${GITHUB_REF}" == *"qkerasV3"* ]]; then
+            pip install \
+              --index-url https://test.pypi.org/simple/ \
+              --extra-index-url https://pypi.org/simple \
+              qkeras-v3==1.0.3
+          fi
+
           pip install -e ".[dev]"
 
       - name: Run tests
         run: pytest -q
+
+      - name: Run pre-commit checks
+        run: |
+          pip install pre-commit
+          pre-commit run --all-files
