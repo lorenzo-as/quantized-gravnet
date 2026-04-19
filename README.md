@@ -1,5 +1,7 @@
 # quantized-gravnet
 
+[![CI](https://github.com/lorenzo-as/quantized-gravnet/actions/workflows/ci.yml/badge.svg)](https://github.com/lorenzo-as/quantized-gravnet/actions/workflows/ci.yml)
+
 A Tensorflow + QKeras-based implementation of the **GravNet** architecture.
 
 This package provides:
@@ -8,17 +10,48 @@ This package provides:
 - `GravNetLayer` and `QGravNetLayer` - a (quantized) GravNet layer
 - `QGravNetBlock` and `QGravNetModel` - modular, multi-block GravNet using Keras subclassing
 - `GravNetFactory` and `QGravNetFactory` - factory class to build (quantized) GravNet models using the Keras Functional API
-- `NeighbourSelector` - extendable neighbour selection strategies for `GravNetCore` 
+- `NeighbourSelector` - extendable neighbour selection strategies for `GravNetCore`
 
 ## Installation
 
-This package was tested with **TensorFlow 2.14.0** and **QKeras 0.9.0**.
+This package is pinned for reproducibility with:
+
+- **TensorFlow 2.14.0**
+- **QKeras 0.9.0**
+
+```bash
+pip install "quantized-gravnet @ git+https://github.com/lorenzo-as/quantized-gravnet.git@v0.1.0"
+```
+
+Development install:
 
 ```bash
 git clone https://github.com/lorenzo-as/quantized-gravnet.git
 cd quantized-gravnet
-git checkout qkeras-classic
-pip install -e .
+pip install -e ".[dev]"
+```
+
+## API notes
+
+### `GravNetCore.call()` signature
+
+`GravNetCore` expects a **list/tuple of tensors**:
+
+- `coords`: `(B, V, S)`
+- `feats`: `(B, V, F_prop)`
+
+```python
+aggregated = core([coords, feats])
+```
+
+### `QGravNetLayer.call()` / `GravNetLayer.call()` signature
+
+Layer call takes a **single feature tensor**:
+
+- `x`: `(B, V, F_in)`
+
+```python
+y = layer(x)
 ```
 
 ## Reference to Original GravNet Paper

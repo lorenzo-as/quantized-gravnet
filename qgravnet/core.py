@@ -7,6 +7,7 @@ from tensorflow import keras
 from .selectors import FullSelector, NeighbourSelector
 
 
+@keras.saving.register_keras_serializable(package="qgravnet")
 class GravNetCore(keras.layers.Layer):
     """
     GravNet neighbour-aggregation for nearest n_neighbours in learned coordinate space.
@@ -73,14 +74,14 @@ class GravNetCore(keras.layers.Layer):
         fmax = tf.reduce_max(weighted, axis=2)
         fmean = tf.reduce_mean(weighted, axis=2)
         return tf.concat([fmax, fmean], axis=-1)
-    
+
     @staticmethod
     def _mask_self(dist):
         """Set self-distances to a large value to exclude self from nearest neighbours."""
-        B = tf.shape(dist)[0]
-        V = tf.shape(dist)[1]
+        shape = tf.shape(dist)
+        V = shape[1]
 
-        eye = tf.eye(V, batch_shape=[B], dtype=dist.dtype)
+        eye = tf.eye(V, batch_shape=shape[0:1], dtype=dist.dtype)
         large = tf.constant(1e9, dtype=dist.dtype)
 
         return dist + eye * large
@@ -100,6 +101,15 @@ class GravNetCore(keras.layers.Layer):
     def get_config(self):
         config = super().get_config()
         config.update(
-            {"n_neighbours": self.n_neighbours, "distance_metric": self.distance_metric}
+            {
+                "n_neighbours": self.n_neighbours,
+                "distance_metric": self.distance_metric,
+                "selector": keras.saving.serialize_keras_object(self.selector),
+            }
         )
         return config
+
+    @classmethod
+    def from_config(cls, config):
+        config["selector"] = keras.saving.deserialize_keras_object(config["selector"])
+        return cls(**config)

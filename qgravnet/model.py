@@ -1,6 +1,7 @@
 # pyright: reportMissingImports=false
 
 from qkeras import QDense
+import tensorflow as tf
 from tensorflow import keras
 
 from .layers import (
@@ -9,6 +10,7 @@ from .layers import (
 )
 
 
+@keras.saving.register_keras_serializable(package="qgravnet")
 class QGravNetBlock(keras.layers.Layer):
     def __init__(
         self,
@@ -32,6 +34,13 @@ class QGravNetBlock(keras.layers.Layer):
 
         if gravnet_kwargs is None:
             gravnet_kwargs = {}
+
+        self.n_neighbours = n_neighbours
+        self.n_dimensions = n_dimensions
+        self.n_propagate = n_propagate
+        self.block_kernel_quantizer = block_kernel_quantizer
+        self.block_bias_quantizer = block_bias_quantizer
+        self.gravnet_kwargs = gravnet_kwargs
 
         self.n_filters = n_filters
 
@@ -87,7 +96,23 @@ class QGravNetBlock(keras.layers.Layer):
         x = self.out_bn(x, training=training)
         return x
 
+    def get_config(self):
+        config = super().get_config()
+        config.update(
+            {
+                "n_neighbours": self.n_neighbours,
+                "n_dimensions": self.n_dimensions,
+                "n_filters": self.n_filters,
+                "n_propagate": self.n_propagate,
+                "block_kernel_quantizer": self.block_kernel_quantizer,
+                "block_bias_quantizer": self.block_bias_quantizer,
+                "gravnet_kwargs": self.gravnet_kwargs,
+            }
+        )
+        return config
 
+
+@keras.saving.register_keras_serializable(package="qgravnet")
 class QGravNetModel(keras.Model):
     def __init__(
         self,
@@ -114,9 +139,15 @@ class QGravNetModel(keras.Model):
             gravnet_kwargs = {}
 
         self.n_blocks = n_blocks
+        self.n_neighbours = n_neighbours
+        self.n_dimensions = n_dimensions
         self.n_filters = n_filters
+        self.n_propagate = n_propagate
         self.n_postgn_dense_blocks = n_postgn_dense_blocks
         self.output_dim = output_dim
+        self.dense_kernel_quantizer = dense_kernel_quantizer
+        self.dense_bias_quantizer = dense_bias_quantizer
+        self.gravnet_kwargs = gravnet_kwargs
 
         # Input BN + global exchange + linear to 64 (on 4*input_dim features)
         self.input_bn = keras.layers.BatchNormalization()
@@ -178,22 +209,22 @@ class QGravNetModel(keras.Model):
             bias_quantizer=dense_bias_quantizer,
         )
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=None, mask=None):
         # inputs: (B, V, F)
-        x = self.input_bn(inputs, training=training)
+        x = self.input_bn(inputs, training=training or False)
         x = self.input_exchange(x)
         x = self.input_dense(x)
 
         feat_list = []
         for block in self.blocks:
-            x = block(x, training=training)
+            x = block(x, training=training or False)
             feat_list.append(x)
 
-        x = keras.ops.concatenate(feat_list, axis=-1)  # (B, V, n_blocks * n_filters)
+        x = tf.concat(feat_list, axis=-1)  # (B, V, n_blocks * n_filters)
 
         for layer in self.postgn_dense_layers:
             if isinstance(layer, keras.layers.BatchNormalization):
-                x = layer(x, training=training)
+                x = layer(x, training=training or False)
             else:
                 x = layer(x)
 
@@ -201,3 +232,21 @@ class QGravNetModel(keras.Model):
         x = self.out1(x)
         x = self.out2(x)
         return x
+
+    def get_config(self):
+        config = super().get_config()
+        config.update(
+            {
+                "n_blocks": self.n_blocks,
+                "n_neighbours": self.n_neighbours,
+                "n_dimensions": self.n_dimensions,
+                "n_filters": self.n_filters,
+                "n_propagate": self.n_propagate,
+                "n_postgn_dense_blocks": self.n_postgn_dense_blocks,
+                "output_dim": self.output_dim,
+                "dense_kernel_quantizer": self.dense_kernel_quantizer,
+                "dense_bias_quantizer": self.dense_bias_quantizer,
+                "gravnet_kwargs": self.gravnet_kwargs,
+            }
+        )
+        return config

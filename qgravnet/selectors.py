@@ -1,6 +1,7 @@
 # pyright: reportMissingImports=false
 
 import tensorflow as tf
+from tensorflow import keras
 
 REGISTRY = {}
 
@@ -28,8 +29,16 @@ class NeighbourSelector:
         """
         raise NotImplementedError
 
+    def get_config(self):
+        return {}
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+
 
 @register("full")
+@keras.saving.register_keras_serializable(package="qgravnet")
 class FullSelector(NeighbourSelector):
     """No restriction, use full pairwise distance matrix for neighbour search."""
 
@@ -38,6 +47,7 @@ class FullSelector(NeighbourSelector):
 
 
 @register("binned")
+@keras.saving.register_keras_serializable(package="qgravnet")
 class BinnedSelector(NeighbourSelector):
     """
     Restrict neighbour search to vertices in the same or adjacent bins
@@ -67,6 +77,14 @@ class BinnedSelector(NeighbourSelector):
         self.window = window
         self.clip_min = clip_min
         self.clip_max = clip_max
+
+    def get_config(self):
+        return {
+            "bins_per_axis": self.bins_per_axis,
+            "window": self.window,
+            "clip_min": self.clip_min,
+            "clip_max": self.clip_max,
+        }
 
     def compute_bins(self, coords):
         # coords: (B, V, S)
@@ -105,5 +123,5 @@ class BinnedSelector(NeighbourSelector):
         return {
             "n_below": n_below,
             "n_above": n_above,
-            "fraction_clipped": (n_below + n_above) / total if total > 0 else 0.0,
+            "fraction_clipped": tf.math.divide_no_nan(n_below + n_above, total),
         }

@@ -139,7 +139,7 @@ class GravNetFactory:
             fprop = input_feature_transform(x)
             if 0.0 < self.gravnet_cfg.get("feature_dropout", -1.0) < 1.0:
                 fprop = layers.Dropout(
-                    self.gravnet_cfg.get("feature_dropout"),
+                    self.gravnet_cfg.get("feature_dropout", 0.0),
                     name=f"{block_prefix}_dropout",
                 )(fprop)
 
@@ -226,6 +226,9 @@ class GravNetFactory:
             )(x)
 
             return keras.Model(inputs=inputs, outputs=outputs, name="qgravnet_model_oc")
+
+        else:
+            raise ValueError(f"Unknown output_head: {self.output_head}")
 
 
 class QGravNetFactory(GravNetFactory):
