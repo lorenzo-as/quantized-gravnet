@@ -7,7 +7,7 @@ from tensorflow import keras
 from .selectors import FullSelector, NeighbourSelector
 
 
-@keras.saving.register_keras_serializable(package="qgravnet")
+@keras.utils.register_keras_serializable(package="qgravnet")
 class GravNetCore(keras.layers.Layer):
     """
     GravNet neighbour-aggregation for nearest n_neighbours in learned coordinate space.
@@ -104,12 +104,12 @@ class GravNetCore(keras.layers.Layer):
             {
                 "n_neighbours": self.n_neighbours,
                 "distance_metric": self.distance_metric,
-                "selector": keras.saving.serialize_keras_object(self.selector),
+                "selector": keras.utils.serialize_keras_object(self.selector),
             }
         )
         return config
 
     @classmethod
     def from_config(cls, config):
-        config["selector"] = keras.saving.deserialize_keras_object(config["selector"])
+        config["selector"] = keras.utils.deserialize_keras_object(config["selector"])
         return cls(**config)

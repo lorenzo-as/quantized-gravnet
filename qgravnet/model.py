@@ -10,7 +10,7 @@ from .layers import (
 )
 
 
-@keras.saving.register_keras_serializable(package="qgravnet")
+@keras.utils.register_keras_serializable(package="qgravnet")
 class QGravNetBlock(keras.layers.Layer):
     def __init__(
         self,
@@ -112,7 +112,7 @@ class QGravNetBlock(keras.layers.Layer):
         return config
 
 
-@keras.saving.register_keras_serializable(package="qgravnet")
+@keras.utils.register_keras_serializable(package="qgravnet")
 class QGravNetModel(keras.Model):
     def __init__(
         self,

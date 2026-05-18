@@ -22,7 +22,7 @@ def _clone_initializer(initializer):
     return keras.initializers.deserialize(_serialize_initializer(initializer))
 
 
-@keras.saving.register_keras_serializable(package="qgravnet")
+@keras.utils.register_keras_serializable(package="qgravnet")
 class GlobalExchange(keras.layers.Layer):
     """
     Compute statistics (mean, min, max) over features for all vertices in the batch
@@ -68,7 +68,7 @@ class GlobalExchange(keras.layers.Layer):
         return config
 
 
-@keras.saving.register_keras_serializable(package="qgravnet")
+@keras.utils.register_keras_serializable(package="qgravnet")
 class GravNetLayer(keras.layers.Layer):
     """
     GravNet layer that accepts pre-constructed transform layers.
@@ -145,20 +145,20 @@ class GravNetLayer(keras.layers.Layer):
         config = super().get_config()
         config.update(
             {
-                "input_feature_transform": keras.saving.serialize_keras_object(
+                "input_feature_transform": keras.utils.serialize_keras_object(
                     self.input_feature_transform
                 ),
-                "input_spatial_transform": keras.saving.serialize_keras_object(
+                "input_spatial_transform": keras.utils.serialize_keras_object(
                     self.input_spatial_transform
                 )
                 if self.input_spatial_transform is not None
                 else None,
-                "output_feature_transform": keras.saving.serialize_keras_object(
+                "output_feature_transform": keras.utils.serialize_keras_object(
                     self.output_feature_transform
                 ),
                 "n_neighbours": self.n_neighbours,
                 "n_dimensions": self.n_dimensions,
-                "selector": keras.saving.serialize_keras_object(self.core.selector),
+                "selector": keras.utils.serialize_keras_object(self.core.selector),
                 "also_coordinates": self.also_coordinates,
                 "feature_dropout": self.feature_dropout,
                 "fix_coordinate_space": self.fix_coordinate_space,
@@ -169,21 +169,21 @@ class GravNetLayer(keras.layers.Layer):
 
     @classmethod
     def from_config(cls, config):
-        config["input_feature_transform"] = keras.saving.deserialize_keras_object(
+        config["input_feature_transform"] = keras.utils.deserialize_keras_object(
             config["input_feature_transform"]
         )
         if config["input_spatial_transform"] is not None:
-            config["input_spatial_transform"] = keras.saving.deserialize_keras_object(
+            config["input_spatial_transform"] = keras.utils.deserialize_keras_object(
                 config["input_spatial_transform"]
             )
-        config["output_feature_transform"] = keras.saving.deserialize_keras_object(
+        config["output_feature_transform"] = keras.utils.deserialize_keras_object(
             config["output_feature_transform"]
         )
-        config["selector"] = keras.saving.deserialize_keras_object(config["selector"])
+        config["selector"] = keras.utils.deserialize_keras_object(config["selector"])
         return cls(**config)
 
 
-@keras.saving.register_keras_serializable(package="qgravnet")
+@keras.utils.register_keras_serializable(package="qgravnet")
 class QGravNetLayer(keras.layers.Layer):
     """
     GravNetLayer wrapper that builds internal transforms with quantized layers.
@@ -297,7 +297,7 @@ class QGravNetLayer(keras.layers.Layer):
                 "n_dimensions": self.n_dimensions,
                 "n_filters": self.n_filters,
                 "n_propagate": self.n_propagate,
-                "selector": keras.saving.serialize_keras_object(
+                "selector": keras.utils.serialize_keras_object(
                     self.gravnet.core.selector
                 ),
                 "also_coordinates": self.also_coordinates,
@@ -312,5 +312,5 @@ class QGravNetLayer(keras.layers.Layer):
 
     @classmethod
     def from_config(cls, config):
-        config["selector"] = keras.saving.deserialize_keras_object(config["selector"])
+        config["selector"] = keras.utils.deserialize_keras_object(config["selector"])
         return cls(**config)

@@ -38,7 +38,7 @@ class NeighbourSelector:
 
 
 @register("full")
-@keras.saving.register_keras_serializable(package="qgravnet")
+@keras.utils.register_keras_serializable(package="qgravnet")
 class FullSelector(NeighbourSelector):
     """No restriction, use full pairwise distance matrix for neighbour search."""
 
@@ -47,7 +47,7 @@ class FullSelector(NeighbourSelector):
 
 
 @register("binned")
-@keras.saving.register_keras_serializable(package="qgravnet")
+@keras.utils.register_keras_serializable(package="qgravnet")
 class BinnedSelector(NeighbourSelector):
     """
     Restrict neighbour search to vertices in the same or adjacent bins
