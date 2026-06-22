@@ -23,6 +23,7 @@ class GravNetFactory:
         output_dim: int = 4,
         output_head: Literal["dual", "oc"] = "dual",
         distance_metric: Literal["l1", "l2_squared"] = "l2_squared",
+        distance_scale: float = 10.0,
         neighbour_selector: Literal["full", "binned"] = "full",
         gravnet_cfg: Optional[Dict] = None,
         selector_cfg: Optional[Dict] = None,
@@ -40,6 +41,7 @@ class GravNetFactory:
         self.output_dim = output_dim
         self.output_head = output_head
         self.distance_metric: Literal["l1", "l2_squared"] = distance_metric
+        self.distance_scale = distance_scale
         self.neighbour_selector = SELECTOR_REGISTRY[neighbour_selector](
             **(selector_cfg or {})
         )
@@ -132,6 +134,7 @@ class GravNetFactory:
             core = GravNetCore(
                 self.n_neighbours,
                 distance_metric=self.distance_metric,
+                distance_scale=self.distance_scale,
                 selector=self.neighbour_selector,
                 name=f"{block_prefix}_core",
             )
@@ -243,6 +246,7 @@ class QGravNetFactory(GravNetFactory):
         output_dim: int = 4,
         output_head: Literal["dual", "oc"] = "dual",
         distance_metric: Literal["l1", "l2_squared"] = "l2_squared",
+        distance_scale: float = 10.0,
         neighbour_selector: Literal["full", "binned"] = "full",
         dense_kernel_quantizer=None,
         dense_bias_quantizer=None,
@@ -260,6 +264,7 @@ class QGravNetFactory(GravNetFactory):
             output_dim=output_dim,
             output_head=output_head,
             distance_metric=distance_metric,
+            distance_scale=distance_scale,
             neighbour_selector=neighbour_selector,
             gravnet_cfg=gravnet_cfg,
             selector_cfg=selector_cfg,

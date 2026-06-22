@@ -23,6 +23,7 @@ class GravNetCore(keras.layers.Layer):
         self,
         n_neighbours: int,
         distance_metric: Literal["l1", "l2_squared"] = "l1",
+        distance_scale: float = 10.0,
         selector: NeighbourSelector | None = None,
         name: str | None = None,
         **kwargs,
@@ -30,6 +31,7 @@ class GravNetCore(keras.layers.Layer):
         super().__init__(name=name, **kwargs)
         self.n_neighbours = n_neighbours
         self.distance_metric = distance_metric
+        self.distance_scale = distance_scale
         self.selector = selector or FullSelector()
 
         distance_fns = {
@@ -67,7 +69,7 @@ class GravNetCore(keras.layers.Layer):
             feats, ranked_indices, axis=1, batch_dims=1
         )  # (B, V, k, F_prop)
 
-        w = tf.exp(-10.0 * ranked_distances)
+        w = tf.exp(-self.distance_scale * ranked_distances)
         w = tf.expand_dims(w, -1)
         weighted = neigh_feats * w
 
