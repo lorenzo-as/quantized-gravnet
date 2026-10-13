@@ -8,7 +8,7 @@ This package provides:
 - `GravNetCore` - the core neighbour-aggregation logic
 - `GlobalExchange` - feature broadcasting (mean/min/max)
 - `GravNetLayer` and `QGravNetLayer` - a (quantized) GravNet layer
-- `QGravNetBlock` and `QGravNetModel` - modular, multi-block GravNet using Keras subclassing
+- `QGravNetBlock` and `QGravNetModel` - **deprecated**, to be removed in the next release; use the factories below
 - `GravNetFactory` and `QGravNetFactory` - factory class to build (quantized) GravNet models using the Keras Functional API
 - `NeighbourSelector` - extendable neighbour selection strategies for `GravNetCore`
 

@@ -98,6 +98,9 @@ def test_qgravnetlayer_forward():
     assert not bool(tf.reduce_any(tf.math.is_nan(y)))
 
 
+@pytest.mark.filterwarnings(
+    "ignore:.*is deprecated and will be removed:DeprecationWarning"
+)
 def test_qgravnetblock_forward():
     """Forward-pass test for QGravNetBlock."""
     from qgravnet.model import QGravNetBlock
@@ -117,6 +120,9 @@ def test_qgravnetblock_forward():
     assert not bool(tf.reduce_any(tf.math.is_nan(y)))
 
 
+@pytest.mark.filterwarnings(
+    "ignore:.*is deprecated and will be removed:DeprecationWarning"
+)
 def test_qgravnetmodel_forward():
     """Forward-pass test for QGravNetModel."""
     from qgravnet.model import QGravNetModel
@@ -206,6 +212,9 @@ def test_smoke_save_load_roundtrip(tmp_path):
     _assert_outputs_close(y_ref, y_loaded, atol=1e-5)
 
 
+@pytest.mark.filterwarnings(
+    "ignore:.*is deprecated and will be removed:DeprecationWarning"
+)
 def test_qgravnetblock_save_load_roundtrip(tmp_path):
     """Smoke test save/load roundtrip for QGravNetBlock outputs."""
     from qgravnet.model import QGravNetBlock
@@ -232,6 +241,9 @@ def test_qgravnetblock_save_load_roundtrip(tmp_path):
     _assert_outputs_close(y_ref, y_loaded, atol=1e-5)
 
 
+@pytest.mark.filterwarnings(
+    "ignore:.*is deprecated and will be removed:DeprecationWarning"
+)
 def test_qgravnetmodel_save_load_roundtrip(tmp_path):
     """Smoke test save/load roundtrip for the subclassed QGravNetModel."""
     from qgravnet.model import QGravNetModel
@@ -414,3 +426,13 @@ def test_factory_default_param_count_unchanged():
         QGravNetFactory(output_head="oc").create_keras_model(64, 4).count_params()
         == 383084
     )
+
+
+@pytest.mark.parametrize("cls_name", ["QGravNetBlock", "QGravNetModel"])
+def test_subclassed_model_is_deprecated(cls_name):
+    from qgravnet import model as model_module
+
+    with pytest.warns(DeprecationWarning, match=cls_name):
+        getattr(model_module, cls_name)(
+            n_neighbours=4, n_dimensions=3, n_filters=8, n_propagate=6
+        )

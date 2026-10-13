@@ -1,5 +1,7 @@
 # pyright: reportMissingImports=false
 
+import warnings
+
 from qkeras import QDense
 import tensorflow as tf
 from tensorflow import keras
@@ -8,6 +10,16 @@ from .layers import (
     GlobalExchange,
     QGravNetLayer,
 )
+
+
+def _warn_deprecated(name: str) -> None:
+    warnings.warn(
+        f"{name} is deprecated and will be removed in the next release. "
+        "Subclassed models cannot go through QKeras -> TF -> hls4ml; "
+        "use QGravNetFactory(...).create_keras_model(...) instead.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
 
 
 @keras.utils.register_keras_serializable(package="qgravnet")
@@ -31,6 +43,7 @@ class QGravNetBlock(keras.layers.Layer):
           -> global_exchange -> Linear -> Tanh -> BN
         """
         super().__init__(**kwargs)
+        _warn_deprecated("QGravNetBlock")
 
         if gravnet_kwargs is None:
             gravnet_kwargs = {}
@@ -134,6 +147,7 @@ class QGravNetModel(keras.Model):
         Keras/QKeras port of the Torch hgcal-gravnet GravNetModel for batched (B, V, F) inputs.
         """
         super().__init__(**kwargs)
+        _warn_deprecated("QGravNetModel")
 
         if gravnet_kwargs is None:
             gravnet_kwargs = {}
@@ -162,19 +176,22 @@ class QGravNetModel(keras.Model):
         # GravNet blocks:
         # - First block expects 64 input channels (after input_dense)
         # - Later blocks operate on n_filters output channels
-        self.blocks = [
-            QGravNetBlock(
-                n_neighbours=n_neighbours,
-                n_dimensions=n_dimensions,
-                n_filters=n_filters,
-                n_propagate=n_propagate,
-                name=f"qgnblock_{i}",
-                block_kernel_quantizer=dense_kernel_quantizer,
-                block_bias_quantizer=dense_bias_quantizer,
-                gravnet_kwargs=gravnet_kwargs,
-            )
-            for i in range(n_blocks)
-        ]
+        with warnings.catch_warnings():
+            # the model already warned; don't repeat per block
+            warnings.simplefilter("ignore", DeprecationWarning)
+            self.blocks = [
+                QGravNetBlock(
+                    n_neighbours=n_neighbours,
+                    n_dimensions=n_dimensions,
+                    n_filters=n_filters,
+                    n_propagate=n_propagate,
+                    name=f"qgnblock_{i}",
+                    block_kernel_quantizer=dense_kernel_quantizer,
+                    block_bias_quantizer=dense_bias_quantizer,
+                    gravnet_kwargs=gravnet_kwargs,
+                )
+                for i in range(n_blocks)
+            ]
 
         # Post-GravNet dense layers: repeated (Dense(128, ReLU) + BN)
         self.postgn_dense_layers = []
