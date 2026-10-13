@@ -335,3 +335,82 @@ def test_binned_selector_restrict_example_input():
         tf.constant(expected, dtype=tf.float32),
         atol=1e-6,
     )
+
+
+@pytest.mark.parametrize("factory_cls", ["GravNetFactory", "QGravNetFactory"])
+@pytest.mark.parametrize("output_head", ["dual", "oc"])
+@pytest.mark.parametrize("gex_mode", ["gex", "nogex"])
+def test_factory_gex_modes_build(factory_cls, output_head, gex_mode):
+    """Each gex_mode builds, has the right output shapes, and only gex has GlobalExchange layers."""
+    from qgravnet import factory as factory_module
+
+    factory = getattr(factory_module, factory_cls)(
+        n_blocks=2,
+        n_neighbours=4,
+        output_head=output_head,
+        output_dim=5,
+        gex_mode=gex_mode,
+    )
+    model = factory.create_keras_model(n_vertices=16, n_features=4)
+
+    gex_layers = [lyr.name for lyr in model.layers if "gex" in lyr.name]
+    if gex_mode == "gex":
+        assert gex_layers == ["input_gex", "qgnblock_0_gex", "qgnblock_1_gex"]
+    else:
+        assert gex_layers == []
+    # out_dense is kept in both modes so the layer graph is otherwise identical
+    assert model.get_layer("qgnblock_1_out_dense") is not None
+
+    y = model(tf.random.normal((2, 16, 4)))
+    if output_head == "dual":
+        assert [t.shape for t in y] == [(2, 1), (2, 1)]
+    else:
+        assert y.shape == (2, 16, 5)
+        assert not bool(tf.reduce_any(tf.math.is_nan(y)))
+
+
+def test_factory_nogex_param_count():
+    """nogex shrinks input_dense (4F_in -> F_in) and each out_dense (4F -> F) inputs."""
+    from qgravnet.factory import GravNetFactory
+
+    n_blocks, n_filters, n_in, d_in = 3, 12, 4, 64
+
+    def build(mode):
+        return GravNetFactory(
+            n_blocks=n_blocks,
+            n_neighbours=4,
+            n_filters=n_filters,
+            n_propagate=6,
+            n_postgn_dense_blocks=1,
+            gex_mode=mode,
+        ).create_keras_model(16, n_in)
+
+    full, plain = build("gex"), build("nogex")
+
+    expected_drop = (4 * n_in - n_in) * d_in + n_blocks * (
+        4 * n_filters - n_filters
+    ) * n_filters
+    assert full.count_params() - plain.count_params() == expected_drop
+
+
+def test_factory_gex_mode_validation():
+    from qgravnet.factory import GravNetFactory
+
+    with pytest.raises(ValueError):
+        GravNetFactory(gex_mode="bogus")  # pyright: ignore[reportArgumentType]
+    with pytest.raises(NotImplementedError):
+        GravNetFactory(gex_mode="fused")
+
+
+def test_factory_default_param_count_unchanged():
+    """Guards the default (gex) architecture against accidental changes."""
+    from qgravnet.factory import QGravNetFactory
+
+    assert (
+        QGravNetFactory(output_head="dual").create_keras_model(64, 4).count_params()
+        == 382954
+    )
+    assert (
+        QGravNetFactory(output_head="oc").create_keras_model(64, 4).count_params()
+        == 383084
+    )

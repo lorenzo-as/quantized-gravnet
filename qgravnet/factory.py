@@ -10,6 +10,9 @@ from .core import GravNetCore
 from .layers import GlobalExchange
 from .selectors import REGISTRY as SELECTOR_REGISTRY
 
+GexMode = Literal["gex", "nogex", "fused"]
+GEX_MODES = ("gex", "nogex", "fused")
+
 
 class GravNetFactory:
     def __init__(
@@ -25,12 +28,18 @@ class GravNetFactory:
         distance_metric: Literal["l1", "l2_squared"] = "l2_squared",
         distance_scale: float = 10.0,
         neighbour_selector: Literal["full", "binned"] = "full",
+        gex_mode: GexMode = "gex",
         gravnet_cfg: Optional[Dict] = None,
         selector_cfg: Optional[Dict] = None,
         dense_layer_dims: Optional[Dict[str, int]] = None,
     ):
         if gravnet_cfg is None:
             gravnet_cfg = {}
+        if gex_mode not in GEX_MODES:
+            raise ValueError(f"Unknown gex_mode: {gex_mode!r}, expected {GEX_MODES}")
+        if gex_mode == "fused":
+            raise NotImplementedError("gex_mode='fused' is not implemented yet")
+        self.gex_mode: GexMode = gex_mode
 
         self.n_blocks = n_blocks
         self.n_neighbours = n_neighbours
@@ -99,8 +108,12 @@ class GravNetFactory:
         )
 
     def _input_stage(self, inputs):
-        # Global exchange + linear to input_dense width
-        x = GlobalExchange(name="input_gex")(inputs)
+        # [gex] global exchange on the raw inputs, then linear to input_dense width
+        x = (
+            GlobalExchange(name="input_gex")(inputs)
+            if self.gex_mode == "gex"
+            else inputs
+        )
         return self._make_dense(
             self.dense_layer_dims["input_dense"],
             activation=None,
@@ -173,7 +186,9 @@ class GravNetFactory:
         )(out)
 
     def _gex_stage(self, out, block_prefix: str):
-        out = GlobalExchange(name=f"{block_prefix}_gex")(out)
+        # nogex keeps out_dense (F -> F) but drops the 4x-wide exchange before it
+        if self.gex_mode == "gex":
+            out = GlobalExchange(name=f"{block_prefix}_gex")(out)
         return self._dense(
             self.n_filters,
             f"{block_prefix}_out_dense",
@@ -248,6 +263,7 @@ class QGravNetFactory(GravNetFactory):
         distance_metric: Literal["l1", "l2_squared"] = "l2_squared",
         distance_scale: float = 10.0,
         neighbour_selector: Literal["full", "binned"] = "full",
+        gex_mode: GexMode = "gex",
         dense_kernel_quantizer=None,
         dense_bias_quantizer=None,
         gravnet_cfg: Optional[Dict] = None,
@@ -266,6 +282,7 @@ class QGravNetFactory(GravNetFactory):
             distance_metric=distance_metric,
             distance_scale=distance_scale,
             neighbour_selector=neighbour_selector,
+            gex_mode=gex_mode,
             gravnet_cfg=gravnet_cfg,
             selector_cfg=selector_cfg,
             dense_layer_dims=dense_layer_dims,
