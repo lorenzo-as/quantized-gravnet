@@ -1,6 +1,6 @@
 # pyright: reportMissingImports=false
 
-from typing import Dict, Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 from qkeras import QDense
 from tensorflow import keras
@@ -74,164 +74,164 @@ class GravNetFactory:
             name=name,
         )
 
-    def create_keras_model(self, n_vertices: int, n_features: int) -> keras.Model:
-        inputs = keras.Input(shape=(n_vertices, n_features), name="gravnet_input")
+    def _cfg(self, key: str, default: Any = None) -> Any:
+        return self.gravnet_cfg.get(key, default)
 
-        # Input BN + global exchange + linear to 64
+    def _dense(
+        self,
+        units: int,
+        name: str,
+        activation: Optional[str] = None,
+        kernel_initializer: Any = None,
+        kernel_quantizer=None,
+        bias_quantizer=None,
+    ):
+        """Dense layer with the shared `other_kernel_initializer` default."""
+        if kernel_initializer is None:
+            kernel_initializer = self._cfg("other_kernel_initializer", "glorot_uniform")
+        return self._make_dense(
+            units,
+            activation=activation,
+            kernel_initializer=kernel_initializer,
+            name=name,
+            kernel_quantizer=kernel_quantizer,
+            bias_quantizer=bias_quantizer,
+        )
+
+    def _input_stage(self, inputs):
+        # Global exchange + linear to input_dense width
         x = GlobalExchange(name="input_gex")(inputs)
-        x = self._make_dense(
+        return self._make_dense(
             self.dense_layer_dims["input_dense"],
             activation=None,
             name="input_dense",
         )(x)
 
-        for ib in range(self.n_blocks):
-            block_prefix = f"qgnblock_{ib}"
+    def _gravnet_layer(self, x, block_prefix: str):
+        """GravNet aggregation: x -> output_feature_transform(concat([x, neigh]))."""
+        # Input feature transform: F_in → F_prop
+        input_feature_transform = self._dense(
+            self.n_propagate,
+            f"{block_prefix}_input_feature_transform",
+            activation=self._cfg("feature_activation", None),
+            kernel_quantizer=self._cfg("feature_kernel_quantizer", None),
+            bias_quantizer=self._cfg("feature_bias_quantizer", None),
+        )
 
-            # Input feature transform: F_in → F_prop
-            input_feature_transform = self._make_dense(
-                self.n_propagate,
-                kernel_initializer=self.gravnet_cfg.get(
-                    "other_kernel_initializer", "glorot_uniform"
-                ),
-                kernel_quantizer=self.gravnet_cfg.get("feature_kernel_quantizer", None),
-                bias_quantizer=self.gravnet_cfg.get("feature_bias_quantizer", None),
-                activation=self.gravnet_cfg.get("feature_activation", None),
-                name=f"{block_prefix}_input_feature_transform",
-            )
+        # Input spatial transform: F_in → S (latent coordinate space)
+        if self._cfg("fix_coordinate_space", False):
+            raise ValueError("fix_coordinate_space=False required")
+        input_spatial_transform = self._dense(
+            self.n_dimensions,
+            f"{block_prefix}_input_spatial_transform",
+            activation=self._cfg("coordinate_activation", None),
+            kernel_initializer=self._cfg(
+                "coordinate_kernel_initializer", keras.initializers.Orthogonal()
+            ),
+            kernel_quantizer=self._cfg("coordinate_kernel_quantizer", None),
+            bias_quantizer=self._cfg("coordinate_bias_quantizer", None),
+        )
 
-            # Input spatial transform: F_in → S (latent coordinate space)
-            if not self.gravnet_cfg.get("fix_coordinate_space", False):
-                input_spatial_transform = self._make_dense(
-                    self.n_dimensions,
-                    kernel_initializer=self.gravnet_cfg.get(
-                        "coordinate_kernel_initializer", keras.initializers.Orthogonal()
-                    ),
-                    kernel_quantizer=self.gravnet_cfg.get(
-                        "coordinate_kernel_quantizer", None
-                    ),
-                    bias_quantizer=self.gravnet_cfg.get(
-                        "coordinate_bias_quantizer", None
-                    ),
-                    activation=self.gravnet_cfg.get("coordinate_activation", None),
-                    name=f"{block_prefix}_input_spatial_transform",
-                )
-            else:
-                raise ValueError("fix_coordinate_space=False required")
+        # Output feature transform: concat([x, neigh]) → n_filters
+        output_feature_transform = self._dense(
+            self.n_filters,
+            f"{block_prefix}_output_feature_transform",
+            activation=self._cfg("output_activation", "tanh"),
+            kernel_quantizer=self._cfg("output_kernel_quantizer", None),
+            bias_quantizer=self._cfg("output_bias_quantizer", None),
+        )
 
-            # Output feature transform: concat([x, neigh]) → n_filters
-            output_feature_transform = self._make_dense(
-                self.n_filters,
-                kernel_initializer=self.gravnet_cfg.get(
-                    "other_kernel_initializer", "glorot_uniform"
-                ),
-                kernel_quantizer=self.gravnet_cfg.get("output_kernel_quantizer", None),
-                bias_quantizer=self.gravnet_cfg.get("output_bias_quantizer", None),
-                activation=self.gravnet_cfg.get("output_activation", "tanh"),
-                name=f"{block_prefix}_output_feature_transform",
-            )
+        core = GravNetCore(
+            self.n_neighbours,
+            distance_metric=self.distance_metric,
+            distance_scale=self.distance_scale,
+            selector=self.neighbour_selector,
+            name=f"{block_prefix}_core",
+        )
 
-            core = GravNetCore(
-                self.n_neighbours,
-                distance_metric=self.distance_metric,
-                distance_scale=self.distance_scale,
-                selector=self.neighbour_selector,
-                name=f"{block_prefix}_core",
-            )
+        fprop = input_feature_transform(x)
+        if 0.0 < self._cfg("feature_dropout", -1.0) < 1.0:
+            fprop = layers.Dropout(
+                self._cfg("feature_dropout", 0.0), name=f"{block_prefix}_dropout"
+            )(fprop)
 
-            fprop = input_feature_transform(x)
-            if 0.0 < self.gravnet_cfg.get("feature_dropout", -1.0) < 1.0:
-                fprop = layers.Dropout(
-                    self.gravnet_cfg.get("feature_dropout", 0.0),
-                    name=f"{block_prefix}_dropout",
-                )(fprop)
+        coords = input_spatial_transform(x)
+        neigh = core([coords, fprop])
+        merged = layers.Concatenate(name=f"{block_prefix}_merge")([x, neigh])
+        return output_feature_transform(merged)
 
-            coords = input_spatial_transform(x)
-            neigh = core([coords, fprop])
-            merged = layers.Concatenate(name=f"{block_prefix}_merge")([x, neigh])
+    def _post_gravnet_dense(self, out, block_prefix: str):
+        out = self._dense(
+            self.dense_layer_dims["post_gn"],
+            f"{block_prefix}_dense0",
+            activation=self._cfg("post_gn_activation", "tanh"),
+        )(out)
+        return self._dense(
+            self.n_filters,
+            f"{block_prefix}_dense1",
+            activation=self._cfg("post_gn_out_activation", "tanh"),
+        )(out)
 
-            out = output_feature_transform(merged)
+    def _gex_stage(self, out, block_prefix: str):
+        out = GlobalExchange(name=f"{block_prefix}_gex")(out)
+        return self._dense(
+            self.n_filters,
+            f"{block_prefix}_out_dense",
+            activation=self._cfg("post_gn_gex_activation", "tanh"),
+        )(out)
 
-            out = self._make_dense(
-                self.dense_layer_dims["post_gn"],
-                activation=self.gravnet_cfg.get("post_gn_activation", "tanh"),
-                kernel_initializer=self.gravnet_cfg.get(
-                    "other_kernel_initializer", "glorot_uniform"
-                ),
-                name=f"{block_prefix}_dense0",
-            )(out)
-            out = self._make_dense(
-                self.n_filters,
-                activation=self.gravnet_cfg.get("post_gn_out_activation", "tanh"),
-                kernel_initializer=self.gravnet_cfg.get(
-                    "other_kernel_initializer", "glorot_uniform"
-                ),
-                name=f"{block_prefix}_dense1",
-            )(out)
+    def _block(self, x, block_prefix: str):
+        out = self._gravnet_layer(x, block_prefix)
+        out = self._post_gravnet_dense(out, block_prefix)
+        return self._gex_stage(out, block_prefix)
 
-            out = GlobalExchange(name=f"{block_prefix}_gex")(out)
-            out = self._make_dense(
-                self.n_filters,
-                activation=self.gravnet_cfg.get("post_gn_gex_activation", "tanh"),
-                kernel_initializer=self.gravnet_cfg.get(
-                    "other_kernel_initializer", "glorot_uniform"
-                ),
-                name=f"{block_prefix}_out_dense",
-            )(out)
-
-            x = out
-
-        # Post-GravNet dense layers
+    def _postgn_stack(self, x):
+        relu = self._cfg("post_gn_relu", "relu")
         for i in range(self.n_postgn_dense_blocks):
             x = self._make_dense(
                 self.dense_layer_dims["postgn_block"],
-                activation=self.gravnet_cfg.get("post_gn_relu", "relu"),
+                activation=relu,
                 name=f"postgn_dense_{i}",
             )(x)
-
         x = self._make_dense(
-            self.dense_layer_dims["out0"],
-            activation=self.gravnet_cfg.get("post_gn_relu", "relu"),
-            name="out0",
+            self.dense_layer_dims["out0"], activation=relu, name="out0"
         )(x)
-        x = self._make_dense(
-            self.dense_layer_dims["out1"],
-            activation=self.gravnet_cfg.get("post_gn_relu", "relu"),
-            name="out1",
+        return self._make_dense(
+            self.dense_layer_dims["out1"], activation=relu, name="out1"
         )(x)
 
+    def _output_head(self, x, inputs):
         if self.output_head == "dual":
             x = layers.GlobalAveragePooling1D(name="global_avg_pool")(x)
             energies = self._make_dense(
                 1,
                 activation=None,
-                kernel_quantizer=self.gravnet_cfg.get(
-                    "regression_kernel_quantizer", None
-                ),
-                bias_quantizer=self.gravnet_cfg.get("regression_bias_quantizer", None),
+                kernel_quantizer=self._cfg("regression_kernel_quantizer", None),
+                bias_quantizer=self._cfg("regression_bias_quantizer", None),
                 name="regression",
             )(x)
             classes = self._make_dense(
                 1,
-                activation=self.gravnet_cfg.get("classification_activation", "sigmoid"),
+                activation=self._cfg("classification_activation", "sigmoid"),
                 name="classification",
             )(x)
-
             return keras.Model(
                 inputs=inputs, outputs=[energies, classes], name="qgravnet_model_dual"
             )
 
-        elif self.output_head == "oc":
-            outputs = self._make_dense(
-                self.output_dim,
-                activation=None,
-                name="out2",
-            )(x)
-
+        if self.output_head == "oc":
+            outputs = self._make_dense(self.output_dim, activation=None, name="out2")(x)
             return keras.Model(inputs=inputs, outputs=outputs, name="qgravnet_model_oc")
 
-        else:
-            raise ValueError(f"Unknown output_head: {self.output_head}")
+        raise ValueError(f"Unknown output_head: {self.output_head}")
+
+    def create_keras_model(self, n_vertices: int, n_features: int) -> keras.Model:
+        inputs = keras.Input(shape=(n_vertices, n_features), name="gravnet_input")
+        x = self._input_stage(inputs)
+        for ib in range(self.n_blocks):
+            x = self._block(x, f"qgnblock_{ib}")
+        x = self._postgn_stack(x)
+        return self._output_head(x, inputs)
 
 
 class QGravNetFactory(GravNetFactory):
