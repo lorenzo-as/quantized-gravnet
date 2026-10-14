@@ -351,7 +351,7 @@ def test_binned_selector_restrict_example_input():
 
 @pytest.mark.parametrize("factory_cls", ["GravNetFactory", "QGravNetFactory"])
 @pytest.mark.parametrize("output_head", ["dual", "oc"])
-@pytest.mark.parametrize("gex_mode", ["gex", "nogex"])
+@pytest.mark.parametrize("gex_mode", ["gex", "nogex", "fused"])
 def test_factory_gex_modes_build(factory_cls, output_head, gex_mode):
     """Each gex_mode builds, has the right output shapes, and only gex has GlobalExchange layers."""
     from qgravnet import factory as factory_module
@@ -370,7 +370,9 @@ def test_factory_gex_modes_build(factory_cls, output_head, gex_mode):
         assert gex_layers == ["input_gex", "qgnblock_0_gex", "qgnblock_1_gex"]
     else:
         assert gex_layers == []
-    # out_dense is kept in both modes so the layer graph is otherwise identical
+    cores = [model.get_layer(f"qgnblock_{i}_core") for i in range(2)]
+    assert all(c.global_stats == (gex_mode == "fused") for c in cores)
+    # out_dense is kept in all modes so the layer graph is otherwise identical
     assert model.get_layer("qgnblock_1_out_dense") is not None
 
     y = model(tf.random.normal((2, 16, 4)))
@@ -405,13 +407,87 @@ def test_factory_nogex_param_count():
     assert full.count_params() - plain.count_params() == expected_drop
 
 
+def test_factory_fused_param_count():
+    """fused = nogex + 3*F_prop extra inputs to each output_feature_transform."""
+    from qgravnet.factory import GravNetFactory
+
+    n_blocks, n_filters, n_prop = 3, 12, 6
+
+    def build(mode):
+        return GravNetFactory(
+            n_blocks=n_blocks,
+            n_neighbours=4,
+            n_filters=n_filters,
+            n_propagate=n_prop,
+            n_postgn_dense_blocks=1,
+            gex_mode=mode,
+        ).create_keras_model(16, 4)
+
+    fused, plain = build("fused"), build("nogex")
+    assert not [lyr for lyr in fused.layers if "gex" in lyr.name]
+    assert (
+        fused.count_params() - plain.count_params() == n_blocks * 3 * n_prop * n_filters
+    )
+
+
+def test_gravnetcore_global_stats():
+    """global_stats appends per-event [mean, min, max] of feats, tiled over vertices."""
+    from qgravnet.core import GravNetCore
+
+    coords = tf.random.normal((2, 10, 3))
+    feats = tf.random.normal((2, 10, 4))
+    plain = GravNetCore(n_neighbours=3, name="plain")([coords, feats])
+    out = GravNetCore(n_neighbours=3, global_stats=True, name="gs")([coords, feats])
+
+    assert out.shape == (2, 10, 20)
+    tf.debugging.assert_near(out[..., :8], plain)
+    for i, red in enumerate([tf.reduce_mean, tf.reduce_min, tf.reduce_max]):
+        expected = tf.broadcast_to(red(feats, axis=1, keepdims=True), (2, 10, 4))
+        tf.debugging.assert_near(out[..., 8 + 4 * i : 12 + 4 * i], expected)
+
+
+def test_gravnetcore_config_roundtrip():
+    from qgravnet.core import GravNetCore
+
+    core = GravNetCore(n_neighbours=3, distance_scale=2.5, global_stats=True, name="c")
+    clone = GravNetCore.from_config(core.get_config())
+    assert clone.global_stats and clone.distance_scale == 2.5
+
+
+@pytest.mark.parametrize("ext", ["keras", "h5"])
+def test_factory_fused_save_load_roundtrip(tmp_path, ext):
+    from qgravnet.factory import QGravNetFactory
+
+    model = QGravNetFactory(
+        n_blocks=2, n_neighbours=4, n_filters=8, n_propagate=6, gex_mode="fused"
+    ).create_keras_model(n_vertices=10, n_features=4)
+    x = tf.random.normal((2, 10, 4))
+    y_ref = model(x, training=False)
+
+    save_path = tmp_path / f"fused.{ext}"
+    model.save(save_path)
+    # legacy h5 does not resolve registered names, so pass them like synth.py does
+    from qkeras import QDense
+
+    from qgravnet.core import GravNetCore
+    from qgravnet.selectors import FullSelector
+
+    custom = {
+        "GravNetCore": GravNetCore,
+        "FullSelector": FullSelector,
+        "QDense": QDense,
+    }
+    loaded = tf.keras.models.load_model(save_path, custom_objects=custom)
+
+    assert loaded.get_layer("qgnblock_0_core").global_stats
+    _assert_outputs_close(y_ref, loaded(x, training=False), atol=1e-5)
+
+
 def test_factory_gex_mode_validation():
     from qgravnet.factory import GravNetFactory
 
     with pytest.raises(ValueError):
         GravNetFactory(gex_mode="bogus")  # pyright: ignore[reportArgumentType]
-    with pytest.raises(NotImplementedError):
-        GravNetFactory(gex_mode="fused")
 
 
 def test_factory_default_param_count_unchanged():

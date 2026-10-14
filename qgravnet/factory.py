@@ -37,8 +37,6 @@ class GravNetFactory:
             gravnet_cfg = {}
         if gex_mode not in GEX_MODES:
             raise ValueError(f"Unknown gex_mode: {gex_mode!r}, expected {GEX_MODES}")
-        if gex_mode == "fused":
-            raise NotImplementedError("gex_mode='fused' is not implemented yet")
         self.gex_mode: GexMode = gex_mode
 
         self.n_blocks = n_blocks
@@ -108,7 +106,8 @@ class GravNetFactory:
         )
 
     def _input_stage(self, inputs):
-        # [gex] global exchange on the raw inputs, then linear to input_dense width
+        # [gex] global exchange on the raw inputs, then linear to input_dense width.
+        # [fused] no input GEX: block 0's core gathers the global stats instead.
         x = (
             GlobalExchange(name="input_gex")(inputs)
             if self.gex_mode == "gex"
@@ -121,7 +120,10 @@ class GravNetFactory:
         )(x)
 
     def _gravnet_layer(self, x, block_prefix: str):
-        """GravNet aggregation: x -> output_feature_transform(concat([x, neigh]))."""
+        """GravNet aggregation: x -> output_feature_transform(concat([x, neigh])).
+
+        [fused] neigh also carries [gmean, gmin, gmax] of fprop (5*n_propagate wide).
+        """
         # Input feature transform: F_in → F_prop
         input_feature_transform = self._dense(
             self.n_propagate,
@@ -159,6 +161,7 @@ class GravNetFactory:
             distance_metric=self.distance_metric,
             distance_scale=self.distance_scale,
             selector=self.neighbour_selector,
+            global_stats=self.gex_mode == "fused",
             name=f"{block_prefix}_core",
         )
 
@@ -186,7 +189,7 @@ class GravNetFactory:
         )(out)
 
     def _gex_stage(self, out, block_prefix: str):
-        # nogex keeps out_dense (F -> F) but drops the 4x-wide exchange before it
+        # nogex/fused keep out_dense (F -> F) but drop the 4x-wide exchange before it
         if self.gex_mode == "gex":
             out = GlobalExchange(name=f"{block_prefix}_gex")(out)
         return self._dense(

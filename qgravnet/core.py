@@ -17,6 +17,10 @@ class GravNetCore(keras.layers.Layer):
         feats:  (B, V, F_prop)
     Returns:
         aggregated features (B, V, 2*F_prop) -> concat([fmax, fmean])
+        with global_stats=True: (B, V, 5*F_prop) -> concat([fmax, fmean, gmean, gmin, gmax])
+
+    global_stats appends mean/min/max of feats over all vertices (a fused GlobalExchange).
+    In HLS these are gathered while the core buffers the event, so they add no full-V barrier.
     """
 
     def __init__(
@@ -25,11 +29,13 @@ class GravNetCore(keras.layers.Layer):
         distance_metric: Literal["l1", "l2_squared"] = "l1",
         distance_scale: float = 10.0,
         selector: NeighbourSelector | None = None,
+        global_stats: bool = False,
         name: str | None = None,
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
         self.n_neighbours = n_neighbours
+        self.global_stats = global_stats
         self.distance_metric = distance_metric
         self.distance_scale = distance_scale
         self.selector = selector or FullSelector()
@@ -75,7 +81,25 @@ class GravNetCore(keras.layers.Layer):
 
         fmax = tf.reduce_max(weighted, axis=2)
         fmean = tf.reduce_mean(weighted, axis=2)
-        return tf.concat([fmax, fmean], axis=-1)
+        if not self.global_stats:
+            return tf.concat([fmax, fmean], axis=-1)
+
+        # per-event stats of the propagated features, same order as GlobalExchange
+        gstats = tf.concat(
+            [
+                tf.reduce_mean(feats, axis=1, keepdims=True),
+                tf.reduce_min(feats, axis=1, keepdims=True),
+                tf.reduce_max(feats, axis=1, keepdims=True),
+            ],
+            axis=-1,
+        )  # (B, 1, 3F_prop)
+        gstats = tf.tile(gstats, [1, tf.shape(feats)[1], 1])
+        return tf.concat([fmax, fmean, gstats], axis=-1)
+
+    def compute_output_shape(self, input_shape):
+        coords_shape, feats_shape = input_shape
+        B, V, F = feats_shape
+        return tf.TensorShape([B, V, (5 if self.global_stats else 2) * F])
 
     @staticmethod
     def _mask_self(dist):
@@ -106,6 +130,8 @@ class GravNetCore(keras.layers.Layer):
             {
                 "n_neighbours": self.n_neighbours,
                 "distance_metric": self.distance_metric,
+                "distance_scale": self.distance_scale,
+                "global_stats": self.global_stats,
                 "selector": keras.utils.serialize_keras_object(self.selector),
             }
         )
